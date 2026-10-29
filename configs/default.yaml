@@ -57,3 +57,29 @@ tax:
 settlement:
   interval_trading_days: 10
   force_close_before_days: 2
+
+signals:
+  # M3 — rule-based regime filter (docs/05 §5)
+  regime:
+    hold_days: 2
+    breadth_risk_off: 0.35
+    breadth_risk_on: 0.60
+    vol_spike_mult: 1.5
+    breadth_window_days: 50
+    market_vol_window_days: 20
+    market_vol_median_window: 120
+    warmup_days: 20
+  # M1a — keyword event tagger (docs/05 §3.1)
+  event_tagger:
+    magnitude_scale: 0.05
+  # P2-08 — TF-IDF + KMeans sector clustering
+  sector_cluster:
+    n_clusters: 6
+    min_n_clusters: 2
+    max_n_clusters: 10
+    random_seed: 42
+    max_features: 4000
+    ngram_max: 2
+    min_df: 2
+  # Ensemble weights (sum need not be 1; renormalised over available signals)
+  weights: { rank: 0.45, news: 0.35, mom: 0.20 }

@@ -55,7 +55,6 @@ from .ingest.stage_watcher import StageWatcher
 from .journal.journal import DecisionJournal
 from .lifecycle import BotState, Lifecycle
 from .models.ensemble import Ensemble
-from .models.vol import VolEstimator
 from .portfolio.constructor import (
     PortfolioTarget,
     TickerScore,
@@ -66,6 +65,12 @@ from .portfolio.ledger import Ledger
 from .portfolio.risk import RiskManager
 from .portfolio.settlement import SettlementCalendar
 from .portfolio.tax_engine import TaxEngineConfig
+from .signals import SignalsBundle
+from .signals.ensemble import SignalsEnsemble
+from .signals.event_tagger import EventTagger
+from .signals.regime import MarketState, NEUTRAL, RegimeFilter, RegimeVerdict
+from .signals.rules_fallback import RulesFallback
+from .signals.volatility import VolatilityModule
 
 # ---------------------------------------------------------------------------
 # Logging setup — JSON to stdout (per docs/10 §3)
@@ -107,9 +112,43 @@ class TradingBot:
         )
         self.validator = OrderValidator(settings, self.risk)
         self.ensemble = Ensemble(settings.strategy)
-        # M4: per-ticker realized-vol estimator for inverse-vol sizing.
-        # window=20 trading days; falls back to 0.02 until each ticker has 5+ obs.
-        self.vol = VolEstimator(window=20, fallback_vol=0.02)
+        # ------------------------------------------------------------------
+        # Signals package — M1a / M3 / M4 / R / ensemble (docs/05 §3, §5, §6)
+        # ------------------------------------------------------------------
+        self.event_tagger = EventTagger(
+            magnitude_scale=settings.signals.event_tagger.magnitude_scale,
+        )
+        self.volatility = VolatilityModule(
+            vol_window=20,
+            fallback_vol=0.02,
+            atr_window=14,
+        )
+        # `self.vol` is kept as an alias for backwards compat with the M4
+        # inverse-vol sizing call sites in _on_day.
+        self.vol = self.volatility.vol_estimator
+        self.regime_filter = RegimeFilter(settings.signals.regime)
+        self.market_state = MarketState()
+        self.rules_fallback = RulesFallback(tagger=self.event_tagger)
+        # Try to wire model1 (ranker) + model2 (news scorer) if artifacts exist.
+        # Failures are caught -> SignalsEnsemble treats them as missing and
+        # falls back to the rules sub-scorers (P0 path).
+        rank_fn = self._try_build_model1_fn()
+        news_fn = self._try_build_model2_fn()
+        self.signals_ensemble = SignalsEnsemble(
+            settings.signals,
+            rank_fn=rank_fn,
+            news_fn=news_fn,
+            mom_fn=None,  # momentum is sourced from rules_fallback
+            rules=self.rules_fallback,
+        )
+        self.signals = SignalsBundle(
+            tagger=self.event_tagger,
+            regime_filter=self.regime_filter,
+            volatility=self.volatility,
+            rules=self.rules_fallback,
+            ensemble=self.signals_ensemble,
+            market_state=self.market_state,
+        )
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=20_000)
         self.kafka = KafkaIngest(settings, self.queue)
         self.assembler = DayAssembler(
@@ -132,6 +171,56 @@ class TradingBot:
         self._tasks: list[asyncio.Task] = []
         self._universe: set[str] = set()
         self._sector_of: dict[str, str] = {}
+
+    # ------------------------------------------------------------------
+    # Optional model loaders — fail-soft; if the artifact isn't exported yet
+    # we just return None and SignalsEnsemble falls back to the rules path.
+    # ------------------------------------------------------------------
+    def _try_build_model1_fn(self):
+        try:
+            from .models.model1_onnx import Model1Ranker, RulesRanker
+            ranker = Model1Ranker()
+            rules_ranker = RulesRanker()
+            if ranker.ready:
+                _log.info("model1_onnx_ready", component="main")
+                # The wrapper expects a feature_windows dict per ticker; the
+                # full wiring lands with bot.features (P1-01). For now we
+                # return the rules ranker as the live path, and a None
+                # placeholder so SignalsEnsemble keeps working.
+                # TODO(P1-01): thread bot.features.ring_buffer through here.
+                return rules_ranker
+            _log.info("model1_onnx_not_ready_using_rules_ranker", component="main")
+            return rules_ranker
+        except Exception as e:  # noqa: BLE001
+            _log.warning("model1_load_failed", err=repr(e), component="main")
+            return None
+
+    def _try_build_model2_fn(self):
+        try:
+            from .models.model2_bridge import Model2NewsScorer, KeywordNewsScorer
+            scorer = Model2NewsScorer()
+            keyword = KeywordNewsScorer()
+            if scorer.ready:
+                _log.info("model2_bridge_ready", component="main")
+            else:
+                _log.info("model2_bridge_not_ready_using_keyword_fallback",
+                          component="main")
+
+            def _news_fn(bundle: DayBundle) -> dict[str, float]:
+                try:
+                    if scorer.ready:
+                        feats = scorer.score(bundle)
+                        return {t: feats[t]["news_score"] for t in feats}
+                except Exception as e:  # noqa: BLE001
+                    _log.warning("model2_score_failed", err=repr(e), component="main")
+                # Fallback path: keyword scorer
+                kw = keyword.score(bundle)
+                return {t: kw[t]["news_score"] for t in kw}
+
+            return _news_fn
+        except Exception as e:  # noqa: BLE001
+            _log.warning("model2_load_failed", err=repr(e), component="main")
+            return None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -328,36 +417,46 @@ class TradingBot:
         if self.lifecycle.state != BotState.TRADING:
             await self.lifecycle.wait_for(BotState.TRADING, timeout=2.0)
 
-        # 2) Build scores
+        # 2) Feed the signals bundle (vol, market state, regime filter)
+        regime_verdict = self.signals.update_for_day(bundle.simulated_date, bundle.ticks)
+
+        # 3) Build scores via SignalsEnsemble (regime-gated, fail-soft)
         try:
-            evals = self.ensemble.evaluate(bundle)
+            evals = self.signals_ensemble.evaluate(bundle, regime_verdict)
         except Exception as e:  # noqa: BLE001
             _log.error("ensemble_failed", err=repr(e), component="strategy")
             return
 
-        # 2b) Update vol estimator with today's closes (M4)
-        for ticker, tick in bundle.ticks.items():
-            self.vol.update(ticker, tick.close)
-
-        # 3) Build target weights + trade deltas
+        # 4) Build target weights + trade deltas
         scores_for_constructor: list[TickerScore] = []
         for e in evals:
             price = bundle.ticks[e.ticker].close if e.ticker in bundle.ticks else 0.0
-            # M4: use realized vol from the rolling window; VolEstimator falls
-            # back to 0.02 for tickers with < 5 observations.
             scores_for_constructor.append(TickerScore(
-                ticker=e.ticker, score=e.score, vol=self.vol.vol(e.ticker),
+                ticker=e.ticker, score=e.score,
+                vol=self.signals.volatility.vol(e.ticker),
                 sector=self._sector_of.get(e.ticker),
                 price=price,
             ))
 
         equity = self.ledger.equity or 1.0
+        # Regime scaling of gross long target (risk_off -> 40%, neutral -> 75%, risk_on -> 92%)
+        gross_table = self.settings.risk.gross_long_target
+        regime_target = self.signals_ensemble.regime_gross_target(regime_verdict, gross_table)
+        # Apply regime scaling by multiplying each weight by regime_target/0.75 (neutral baseline).
+        # The constructor accepts absolute weights and caps at max_weight_name,
+        # so the cleanest way is to scale target weights post-hoc.
         target_w = build_target_weights(
             scores_for_constructor, self.settings.strategy, equity,
             sector_caps={"Tech": self.settings.risk.max_sector_weight,
                          "Finance": self.settings.risk.max_sector_weight},
             sector_of=self._sector_of,
         )
+        scale = regime_target / 0.75 if 0.75 > 0 else 1.0
+        target_w = {t: w * scale for t, w in target_w.items()}
+        # Renormalise after scaling
+        total = sum(target_w.values())
+        if total > 0:
+            target_w = {t: w / total for t, w in target_w.items()}
         max_orders_remaining = await self.lifecycle.gate.orders_remaining(max_orders)
         deltas = build_trade_deltas(
             current_holdings={t: q for t, q in self.ledger.holdings.items()},
@@ -370,7 +469,7 @@ class TradingBot:
             short_allowed=short_allowed,
         )
 
-        # 4) Execute trades
+        # 5) Execute trades
         for d in deltas.trades:
             req = OrderRequest(
                 ticker=d.ticker, action=d.action, quantity=d.qty,
@@ -393,7 +492,7 @@ class TradingBot:
             await self.order_manager.submit(req, scores=scores, reasons=reasons)
             await self.lifecycle.gate.record_order()
 
-        # 5) Hold records (one per ticker that had a tick but no trade)
+        # 6) Hold records (one per ticker that had a tick but no trade)
         traded = {d.ticker for d in deltas.trades}
         for ev in evals:
             if ev.ticker in traded:
@@ -407,7 +506,9 @@ class TradingBot:
                 "source": "core",
                 "scores": {"rank": ev.rank_score, "news": ev.news_score,
                             "mom": ev.momentum_score, "ensemble": ev.score},
-                "regime": None, "target_w": None, "current_w": None,
+                "regime": regime_verdict.regime,
+                "regime_target": regime_target,
+                "target_w": None, "current_w": None,
                 "reasons": ev.reasons, "shap_top3": [],
                 "latency_ms": {"assemble": bundle.assembly_latency_ms},
                 "order_id": "", "status": "HOLD", "reject_code": None,

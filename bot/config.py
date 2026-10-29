@@ -127,6 +127,60 @@ class SettlementSettings:
 
 
 @dataclass
+class RegimeSettings:
+    """M3 — risk-on / neutral / risk-off (docs/05 §5)."""
+
+    # Hysteresis: must hold `hold_days` consecutive days before switching.
+    hold_days: int = 2
+    # Inputs (per docs/05 §5):
+    breadth_risk_off: float = 0.35   # breadth_pct < this AND market_20d_ret < 0 -> risk-off
+    breadth_risk_on: float = 0.60    # breadth_pct > this AND market_20d_ret > 0 -> risk-on
+    # Vol regime: market_vol > vol_spike_mult × 120-d median vol -> risk-off
+    vol_spike_mult: float = 1.5
+    # History window for breadth + vol median
+    breadth_window_days: int = 50    # SMA window for "price > SMA" breadth
+    market_vol_window_days: int = 20
+    market_vol_median_window: int = 120
+    # If we have < this many market days of history, stay neutral (no regime call yet)
+    warmup_days: int = 20
+
+
+@dataclass
+class EventTaggerSettings:
+    """M1a — keyword tagger (docs/05 §3.1)."""
+
+    # Magnitude scaling for signed % features (e.g. "profit jumps 12%")
+    magnitude_scale: float = 0.05  # 1.0 maps to ±1.0 when pct * (1/scale) >= 1
+
+
+@dataclass
+class SectorClusterSettings:
+    """P2-08 — TF-IDF + KMeans over /stocks descriptions."""
+
+    n_clusters: int = 6
+    min_n_clusters: int = 2
+    max_n_clusters: int = 10
+    random_seed: int = 42
+    # TF-IDF params
+    max_features: int = 4000
+    ngram_max: int = 2
+    min_df: int = 2
+
+
+@dataclass
+class SignalsSettings:
+    """Container for the M3/M4/M1a + sector clustering + ensemble knobs."""
+
+    regime: RegimeSettings = field(default_factory=RegimeSettings)
+    event_tagger: EventTaggerSettings = field(default_factory=EventTaggerSettings)
+    sector_cluster: SectorClusterSettings = field(default_factory=SectorClusterSettings)
+    # Ensemble weights (sum need not be 1; we renormalise over the signals we have).
+    weights: dict[str, float] = field(
+        default_factory=lambda: {"rank": 0.45, "news": 0.35, "mom": 0.20}
+    )
+
+
+@dataclass
 class Settings:
     env: Literal["development", "sandbox", "live"] = "sandbox"
     server_ip: str = "127.0.0.1"
@@ -140,6 +194,7 @@ class Settings:
     risk: RiskSettings = field(default_factory=RiskSettings)
     tax: TaxSettings = field(default_factory=TaxSettings)
     settlement: SettlementSettings = field(default_factory=SettlementSettings)
+    signals: SignalsSettings = field(default_factory=SignalsSettings)
 
     # ---- derived helpers ----
     @property
@@ -215,6 +270,34 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
         s.tax = TaxSettings(**{k: v for k, v in merged["tax"].items() if k in TaxSettings.__dataclass_fields__})
     if "settlement" in merged:
         s.settlement = SettlementSettings(**{k: v for k, v in merged["settlement"].items() if k in SettlementSettings.__dataclass_fields__})
+    if "signals" in merged:
+        sig = dict(merged["signals"])
+        if "weights" in sig:
+            s.signals.weights = {k: float(v) for k, v in sig["weights"].items()}
+            sig.pop("weights")
+        # Nested: regime / event_tagger / sector_cluster
+        if "regime" in sig:
+            s.signals.regime = RegimeSettings(
+                **{k: v for k, v in sig["regime"].items() if k in RegimeSettings.__dataclass_fields__}
+            )
+            sig.pop("regime")
+        if "event_tagger" in sig:
+            s.signals.event_tagger = EventTaggerSettings(
+                **{k: v for k, v in sig["event_tagger"].items() if k in EventTaggerSettings.__dataclass_fields__}
+            )
+            sig.pop("event_tagger")
+        if "sector_cluster" in sig:
+            s.signals.sector_cluster = SectorClusterSettings(
+                **{k: v for k, v in sig["sector_cluster"].items() if k in SectorClusterSettings.__dataclass_fields__}
+            )
+            sig.pop("sector_cluster")
+        s.signals = SignalsSettings(
+            **{k: v for k, v in sig.items() if k in SignalsSettings.__dataclass_fields__},
+            weights=s.signals.weights,
+            regime=s.signals.regime,
+            event_tagger=s.signals.event_tagger,
+            sector_cluster=s.signals.sector_cluster,
+        )
 
     return s
 
