@@ -584,6 +584,8 @@ class TradingBot:
             p = PortfolioResponse.model_validate(raw)
             self.ledger.cash = p.cash
             self.ledger.initial_cash = p.cash
+            # P3-21: server cash cache for BUY clamps between reconciles.
+            self._server_cash = float(p.cash)
             # Reset positions from server snapshot (drift correction)
             from .portfolio.ledger import Lot, ShortPos
             from collections import defaultdict, deque
@@ -689,6 +691,37 @@ class TradingBot:
                 pass
         except Exception as e:  # noqa: BLE001
             _log.warning("reconcile_failed", err=repr(e), component="main")
+
+    # ------------------------------------------------------------------
+    # P3-21: optimistic server-cache update on confirmed fills
+    # ------------------------------------------------------------------
+    def _apply_fill_to_server_cache(self, resp) -> None:
+        """Update _server_holdings / _server_shorts / _server_cash after a
+        FILLED order so subsequent clamps in the same batch use fresh truth
+        (the 15s reconcile would otherwise serve stale numbers)."""
+        try:
+            fee = float(self.settings.tax.brokerage_per_order)
+            notional = float(resp.quantity) * float(resp.price or 0.0)
+            if not hasattr(self, "_server_holdings"):
+                return
+            if resp.action == "BUY":
+                self._server_holdings[resp.ticker] = int(
+                    self._server_holdings.get(resp.ticker, 0)) + int(resp.quantity)
+                if hasattr(self, "_server_cash"):
+                    self._server_cash = max(0.0, self._server_cash - notional - fee)
+            elif resp.action == "SELL":
+                self._server_holdings[resp.ticker] = int(
+                    self._server_holdings.get(resp.ticker, 0)) - int(resp.quantity)
+                if hasattr(self, "_server_cash"):
+                    self._server_cash = self._server_cash + notional - fee
+            elif resp.action == "SHORT":
+                self._server_shorts[resp.ticker] = int(
+                    self._server_shorts.get(resp.ticker, 0)) + int(resp.quantity)
+            elif resp.action == "COVER":
+                self._server_shorts[resp.ticker] = max(0, int(
+                    self._server_shorts.get(resp.ticker, 0)) - int(resp.quantity))
+        except Exception as e:  # noqa: BLE001
+            _log.warning("server_cache_update_failed", err=repr(e), component="main")
 
     # ------------------------------------------------------------------
     # P3-20: state-divergence resync
@@ -1007,6 +1040,24 @@ class TradingBot:
                     qty = coverable
                 if qty <= 0:
                     continue
+            elif d.action == "BUY":
+                # P3-21: clamp BUYs to server-verified cash with a 2%
+                # price-drift buffer + brokerage, so the server never sees
+                # an order it would reject with INSUFFICIENT_CAPITAL.
+                server_cash = getattr(self, "_server_cash", None)
+                if server_cash is not None and d.price > 0:
+                    max_frac = float(getattr(self.settings.risk, "max_cash_per_trade", 0.90) or 0.90)
+                    affordable = (server_cash * max_frac - self.settings.tax.brokerage_per_order) * 0.98
+                    max_qty = int(affordable / d.price)
+                    if qty > max_qty:
+                        _log.info("buy_clamped_to_server_cash", ticker=d.ticker,
+                                  wanted=qty, max_qty=max_qty,
+                                  server_cash=round(server_cash, 0), component="main")
+                        qty = max_qty
+                    if qty <= 0 or qty * d.price < self.settings.strategy.min_trade_notional:
+                        _log.info("buy_skipped_unaffordable", ticker=d.ticker,
+                                  server_cash=round(server_cash, 0), component="main")
+                        continue
             req = OrderRequest(
                 ticker=d.ticker, action=d.action, quantity=qty,
                 date=bundle.simulated_date, reason=d.reason,
@@ -1025,7 +1076,12 @@ class TradingBot:
                           qty=d.qty, price=d.price, target_w=d.target_weight,
                           component="main")
                 continue
-            await self.order_manager.submit(req, scores=scores, reasons=reasons)
+            resp = await self.order_manager.submit(req, scores=scores, reasons=reasons)
+            # P3-21: keep the server-truth caches fresh between reconciles so
+            # the NEXT order in this batch is clamped against what the server
+            # actually holds right now (fills change cash + positions).
+            if getattr(resp, "status", "") == "FILLED":
+                self._apply_fill_to_server_cache(resp)
             await self.lifecycle.gate.record_order()
 
         # 6) Hold records (one per ticker that had a tick but no trade)

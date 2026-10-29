@@ -121,34 +121,64 @@ class OrderManager:
         self.stats.submitted += 1
         t0 = time.perf_counter()
         body = req.model_dump(mode="json")
-        try:
-            resp = await self.api.post("/api/v1/orders", body)
-        except Exception as e:  # noqa: BLE001
+        # P3-21: submit with retry — transient network errors and 429s are
+        # retried (429 after the penalty-box backoff, network errors after a
+        # short delay) before we give up. On final failure the outcome is
+        # UNKNOWN (never REJECTED — the server may have executed it), the
+        # in-flight slot is released, and a resync is triggered.
+        resp = None
+        last_err: Optional[str] = None
+        for attempt in range(3):
+            try:
+                resp = await self.api.post("/api/v1/orders", body)
+            except Exception as e:  # noqa: BLE001
+                last_err = repr(e)
+                _log.warning("order_post_exception", err=last_err, attempt=attempt,
+                             req=body, component="orders")
+                resp = None
+                if attempt < 2:
+                    import asyncio as _aio
+                    await _aio.sleep(1.0 * (attempt + 1))
+                    continue
+                break
+            if resp.get("_status", 0) == 429:
+                await self.rate_limiter.note_429()
+                self.stats.rate_limited += 1
+                if attempt < 2:
+                    import asyncio as _aio
+                    _log.info("order_429_retry", attempt=attempt, ticker=req.ticker,
+                              component="orders")
+                    await _aio.sleep(5.0 * (attempt + 1))
+                    continue
+            break
+        self.stats.last_latency_ms = (time.perf_counter() - t0) * 1000.0
+
+        if resp is None:
+            # Network never came back — truth unknown, resync and report UNKNOWN.
             self.validator.clear_in_flight(req)
-            _log.error("order_post_exception", err=repr(e), req=body, component="orders")
-            self._journal_rejection(req, RejectCode.SERVER_ERROR, repr(e), scores, reasons)
-            self.stats.rejected += 1
+            self._notify_divergence("order_post_failed", req.ticker)
             return OrderResponse(
                 id="", ticker=req.ticker, action=req.action, quantity=req.quantity,
-                price=0.0, status="REJECTED", reject_code=RejectCode.SERVER_ERROR,
-                reject_message=repr(e), date=req.date, timestamp=datetime.utcnow(),
+                price=0.0, status="UNKNOWN", reject_code=RejectCode.SERVER_ERROR,
+                reject_message=f"post failed after retries: {last_err}; resyncing",
+                date=req.date, timestamp=datetime.utcnow(),
             )
-        self.stats.last_latency_ms = (time.perf_counter() - t0) * 1000.0
 
         status = resp.get("_status", 0)
         payload = resp.get("_body", {})
 
-        # 4) Handle 429 -> penalty box + single retry after backoff
+        # 4) 429 after all retries — give up gracefully, resync.
         if status == 429:
-            await self.rate_limiter.note_429()
             self.validator.clear_in_flight(req)
-            self.stats.rate_limited += 1
-            self._journal_rejection(req, RejectCode.RATE_LIMITED, "429 from server", scores, reasons)
+            self._notify_divergence("rate_limited_persistent", req.ticker)
+            self._journal_rejection(req, RejectCode.RATE_LIMITED,
+                                    "429 after retries", scores, reasons)
             return OrderResponse(
                 id="", ticker=req.ticker, action=req.action,
                 quantity=req.quantity, price=0.0,
-                status="REJECTED", reject_code=RejectCode.RATE_LIMITED,
-                reject_message="429", date=req.date, timestamp=datetime.utcnow(),
+                status="UNKNOWN", reject_code=RejectCode.RATE_LIMITED,
+                reject_message="429 after retries; resyncing",
+                date=req.date, timestamp=datetime.utcnow(),
             )
 
         # 5) Handle 4xx rejections
@@ -168,16 +198,17 @@ class OrderManager:
                 date=req.date, timestamp=datetime.utcnow(),
             )
 
-        # 6) Handle 5xx
+        # 6) Handle 5xx — server-side failure; outcome unknown, resync.
         if status >= 500:
             self.validator.clear_in_flight(req)
             self.stats.rejected += 1
+            self._notify_divergence(f"http_{status}", req.ticker)
             self._journal_rejection(req, RejectCode.SERVER_ERROR, f"HTTP {status}", scores, reasons)
             return OrderResponse(
                 id="", ticker=req.ticker, action=req.action,
                 quantity=req.quantity, price=0.0,
-                status="REJECTED", reject_code=RejectCode.SERVER_ERROR,
-                reject_message=f"HTTP {status}",
+                status="UNKNOWN", reject_code=RejectCode.SERVER_ERROR,
+                reject_message=f"HTTP {status}; resyncing",
                 date=req.date, timestamp=datetime.utcnow(),
             )
 
