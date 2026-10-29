@@ -163,6 +163,13 @@ def main() -> int:
         return 1
 
     strategies = {
+        # Partial profit booking: sell `frac` of the position at +pct (exit at
+        # that close), remainder follows the recorded exit. Blends "book
+        # profits" with "let winners run" — tested per user request.
+        "p50@10":   ("partial", 0.50, 0.10),
+        "p50@15":   ("partial", 0.50, 0.15),
+        "p33@10":   ("partial", 0.33, 0.10),
+        "p25@8":    ("partial", 0.25, 0.08),
         "sl5":      lambda c, a, i0, i1, e: sim_flat_stop(c, i0, i1, e, 0.05),
         "sl10":     lambda c, a, i0, i1, e: sim_flat_stop(c, i0, i1, e, 0.10),
         "atr2.0":   lambda c, a, i0, i1, e: sim_atr_stop(c, a, i0, i1, e, 2.0),
@@ -198,6 +205,24 @@ def main() -> int:
 
     for name, fn in strategies.items():
         pnls, trig, days = [], 0, []
+        if isinstance(fn, tuple) and fn[0] == "partial":
+            _, frac, pct = fn
+            for tr, i0, i1, j in usable:
+                closes = P[:, j]
+                hit = sim_flat_tp(closes, i0, i1, tr.entry_price, pct)
+                if hit is not None and np.isfinite(hit[0]):
+                    tp_px, _d = hit
+                    # frac sold at the TP close; rest at the recorded exit.
+                    pnl = (frac * tr.qty * (tp_px - tr.entry_price)
+                           + (1 - frac) * tr.qty * (tr.exit_price - tr.entry_price)
+                           - tr.charges)
+                    pnls.append(pnl)
+                    trig += 1
+                else:
+                    pnls.append(tr.pnl)
+                days.append(tr.hold_days)
+            rows[name] = stats(pnls, trig, days)
+            continue
         for tr, i0, i1, j in usable:
             closes, atrs = P[:, j], ATR[:, j]
             hit = fn(closes, atrs, i0, i1, tr.entry_price)

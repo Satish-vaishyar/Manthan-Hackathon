@@ -88,11 +88,22 @@ strategy:
     # from realised P&L at runtime and self-heals via 0.90/quiet-day decay.
     veto_pulls: 5  # decayed count; ~5 recent realised trades
     veto_z: -0.55
+    # Magnitude guard: veto also needs avg realised <= -5000/trade, so
+    # low-win-rate / big-winner names (the profit engine) are NOT vetoed.
+    veto_avg_rupees: 5000
     day_decay: 0.90
   # P3-23: take-profit — DISABLED, superseded by trailing_sl below (the
   # trailing stop books max possible profit: winners run past +10% while
   # the stop ratchets up behind them).
   take_profit_pct: 0.0
+  # P3-25: partial take-profit — book 25% of a winner once at +8%, let the
+  # other 75% ride the native score-decay exit. Exit tournament: full TP
+  # cost -2.3L; 25%@8% costs only -30K — the cheapest profit-booking that
+  # keeps the winners' tail.
+  partial_take_profit:
+    enabled: true
+    fraction: 0.25
+    pct: 0.08
   # P3-24: stepped trailing SL — DISABLED 2026-10-30 after the exit-strategy
   # tournament (scripts/tune_exits.py, 744 round trips): EVERY mechanical
   # exit overlay lost money vs the native score-decay exit; stepped was the

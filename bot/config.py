@@ -172,6 +172,11 @@ class StrategySettings:
     # P3-23: take-profit — SELL a long whose unrealised gain from FIFO entry
     # reaches this fraction (0 disables). 0.10 = lock in +10% winners.
     take_profit_pct: float = 0.0
+    # P3-25: partial take-profit — book `fraction` of a long once when gain
+    # >= pct from FIFO entry; the rest rides the native score-decay exit.
+    # Tournament: full TP cost -2.3L; 25%@8% costs only -30K (cheapest
+    # profit-booking insurance that keeps the winners' tail).
+    partial_take_profit: "PartialTakeProfitSettings" = None  # type: ignore[assignment]
     # P3-24: trailing stop-loss — initial stop at entry*(1-initial_pct);
     # as price rises the stop trails the peak by trail_pct (never lowers).
     trailing_sl: "TrailingSLSettings" = None  # type: ignore[assignment]
@@ -195,6 +200,15 @@ class DisagreementGateSettings:
     |scores| exceed `threshold` (strong disagreement)."""
     enabled: bool = False
     threshold: float = 0.1
+
+
+@dataclass
+class PartialTakeProfitSettings:
+    """Book `fraction` of a long once at +`pct` from FIFO entry; the rest
+    rides the native exit. Fires once per position lifetime."""
+    enabled: bool = False
+    fraction: float = 0.25
+    pct: float = 0.08
 
 
 @dataclass
@@ -232,6 +246,9 @@ class TickerBanditSettings:
     min_obs: int = 2
     veto_pulls: int = 5    # hard-BUY-veto after this many realised trades
     veto_z: float = -0.55  # ...when edge z <= this (strongly negative)
+    # ...AND avg realised P&L per trade <= -this (magnitude guard: spares
+    # low-win-rate / big-winner names whose EMA z is negative but small).
+    veto_avg_rupees: float = 5000.0
     day_decay: float = 0.90  # EMA decay per quiet sim day (self-healing)
 
 
@@ -497,7 +514,15 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
                 min_obs=int(tb_block.get("min_obs", 2) or 2),
                 veto_pulls=int(tb_block.get("veto_pulls", 5) or 5),
                 veto_z=float(tb_block.get("veto_z", -0.55) or -0.55),
+                veto_avg_rupees=float(tb_block.get("veto_avg_rupees", 5000.0) or 5000.0),
                 day_decay=float(tb_block.get("day_decay", 0.90) or 0.90),
+            )
+        ptp_block = strat.pop("partial_take_profit", None)
+        if ptp_block is not None:
+            s.strategy.partial_take_profit = PartialTakeProfitSettings(
+                enabled=bool(ptp_block.get("enabled", False)),
+                fraction=float(ptp_block.get("fraction", 0.25) or 0.25),
+                pct=float(ptp_block.get("pct", 0.08) or 0.08),
             )
         ts_block = strat.pop("trailing_sl", None)
         if ts_block is not None:

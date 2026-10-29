@@ -129,11 +129,11 @@ def test_seeded_bandit_vetoes_chronic_loser() -> None:
     orders = []
     for i in range(6):
         d = f"2026-01-{10 + i:02d}"
-        orders.append({"ticker": "ZZZ", "action": "BUY", "quantity": 10,
+        orders.append({"ticker": "ZZZ", "action": "BUY", "quantity": 1000,
                        "execution_price": 100.0, "status": "FILLED",
                        "simulated_date": f"2026-01-{i + 1:02d}"})
-        orders.append({"ticker": "ZZZ", "action": "SELL", "quantity": 10,
-                       "execution_price": 95.0, "status": "FILLED",
+        orders.append({"ticker": "ZZZ", "action": "SELL", "quantity": 1000,
+                       "execution_price": 90.0, "status": "FILLED",
                        "simulated_date": d})
     b = _bandit()
     for t, pnl, day in TradingBot._fifo_realised(orders):
@@ -141,10 +141,32 @@ def test_seeded_bandit_vetoes_chronic_loser() -> None:
     assert b.is_vetoed("ZZZ") is True
 
 
+def test_veto_magnitude_guard_spares_asymmetric_winners() -> None:
+    """z <= veto_z but tiny avg loss per trade -> NO veto (magnitude guard)."""
+    import datetime as dt
+    b = _bandit()
+    day = dt.date(2026, 1, 1)
+    for i in range(6):
+        b.observe("AAA", -100, day=day + dt.timedelta(days=i))  # z -> -1, tiny
+    assert b.is_vetoed("AAA", today=day + dt.timedelta(days=6)) is False
+    # Same shape with real money lost -> vetoed.
+    for i in range(6):
+        b.observe("BBB", -20_000, day=day + dt.timedelta(days=i))
+    assert b.is_vetoed("BBB", today=day + dt.timedelta(days=6)) is True
+
+
 def test_take_profit_knob_from_yaml() -> None:
     s = load_settings("configs/default.yaml")
     # Disabled in YAML: superseded by trailing_sl (P3-24).
     assert s.strategy.take_profit_pct == pytest.approx(0.0)
+
+
+def test_partial_take_profit_block_parsed() -> None:
+    s = load_settings("configs/default.yaml")
+    ptp = s.strategy.partial_take_profit
+    assert ptp is not None and ptp.enabled is True
+    assert ptp.fraction == pytest.approx(0.25)
+    assert ptp.pct == pytest.approx(0.08)
 
 
 def test_trailing_sl_block_parsed() -> None:

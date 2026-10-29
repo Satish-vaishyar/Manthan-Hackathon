@@ -213,6 +213,10 @@ class TickerBandit:
     # quiet re-earns eligibility (unlike a static blacklist).
     veto_pulls: int = 5
     veto_z: float = -0.55
+    # Magnitude guard: veto requires ema <= -veto_avg_rupees too, so
+    # low-win-rate / BIG-winner names (the bot's profit profile) are not
+    # vetoed for losing often while winning big.
+    veto_avg_rupees: float = 5000.0
     day_decay: float = 0.90
 
     _ema: dict[str, float] = field(default_factory=dict)
@@ -272,7 +276,9 @@ class TickerBandit:
             ema = self._ema.get(ticker, 0.0)
             ema_abs = self._ema_abs.get(ticker, 0.0)
             z = ema / (ema_abs + 1e-9)
-            return z <= self.veto_z
+            # Both: consistently negative AND losing meaningful money per
+            # trade on average. Asymmetric winners (rare big wins) survive.
+            return z <= self.veto_z and ema <= -float(self.veto_avg_rupees)
 
     def multiplier(self, ticker: str) -> float:
         if not self.enabled:
@@ -314,6 +320,7 @@ def build_bandit_from_settings(strategy_settings) -> Optional[TickerBandit]:
         min_obs=int(getattr(cfg, "min_obs", 2) or 2),
         veto_pulls=int(getattr(cfg, "veto_pulls", 5) or 5),
         veto_z=float(getattr(cfg, "veto_z", -0.55) or -0.55),
+        veto_avg_rupees=float(getattr(cfg, "veto_avg_rupees", 5000.0) or 5000.0),
         day_decay=float(getattr(cfg, "day_decay", 0.90) or 0.90),
         enabled=True,
     )
