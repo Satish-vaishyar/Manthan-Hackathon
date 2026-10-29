@@ -1,0 +1,56 @@
+# model2 — News Relevance & Impact Model (NRIM)
+# All paths are relative to the model2/ folder.
+
+kafka:                       # used only by src/record_kafka.py
+  bootstrap: "192.168.65.157:9094"
+  topics: [market.ticks, market.news]
+  group_prefix: "recorder"   # NOT group-<team>: the recorder must not steal partitions from the bot
+
+data:
+  captures_dir: data/raw/captures          # every capture folder holds ticks.jsonl / news.jsonl
+  news_csv: data/processed/news.csv        # written by consolidate.py (deduplicated across sandbox loops)
+  prices_csv: data/processed/prices.csv
+  aliases_auto: data/processed/aliases_auto.json
+  aliases_manual: configs/aliases_manual.json
+  dataset: data/processed/dataset.parquet  # written by prepare.py
+  max_gap_days: 5            # label only if the next candle is <= 5 calendar days later (avoids loop jumps)
+  label_clip: 0.15
+  split: [0.70, 0.15, 0.15]  # train / val / test by simulated date order
+  embargo_days: 2
+
+text:
+  max_items_per_day: 16      # items per ticker-day kept (alias matches first, then most recent)
+  max_len: 96                # tokens per item
+  desc_chars: 300            # description characters appended to the headline
+
+model:
+  encoder: ProsusAI/finbert  # BERT-base financial encoder (~110M params); downloaded once, then cached
+  teacher: ProsusAI/finbert  # frozen sentiment teacher used for the distillation target
+  unfreeze_layers: 4         # top transformer layers fine-tuned (0 = frozen encoder)
+  d_item: 128
+  n_ctx: 5                   # day-D price context features (see prepare.py CTX_FEATURES)
+  dropout: 0.2
+
+train:
+  seed: 42
+  n_seeds: 3
+  epochs: 15
+  batch_ticker_days: 16
+  lr_encoder: 2.0e-5
+  lr_head: 1.0e-3
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  grad_clip: 1.0
+  patience: 4                # early stop on validation news IC
+  amp: true
+  min_train_ticker_days: 300 # refuse a full run below this (record more news first)
+  loss:
+    ret: 1.0                 # Huber on standardised next-day excess return
+    ic: 0.5                  # batch correlation between score and return
+    direction: 0.3
+    absmove: 0.2
+    relevance: 0.5           # weak labels from company aliases
+    distill: 0.3             # KL to frozen FinBERT sentiment
+
+export:
+  out_dir: artifacts

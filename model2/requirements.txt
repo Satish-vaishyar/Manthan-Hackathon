@@ -1,0 +1,10 @@
+# Install PyTorch with CUDA first, matching the GPU machine's driver, e.g.:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+torch>=2.3
+transformers>=4.40
+numpy>=1.26
+pandas>=2.1
+pyarrow>=14
+pyyaml>=6.0
+scikit-learn>=1.4
+kafka-python>=2.1      # only for src/record_kafka.py (on the venue network)
