@@ -49,6 +49,69 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 
+# ---------------------------------------------------------------------------
+# Interpreter guard — the bot's deps (aiokafka, torch, onnxruntime, …) live in
+# ONE interpreter. If run_bot.py is launched with a bare Python that lacks
+# them (e.g. a fresh Python 3.14 install), re-exec with a working one instead
+# of dying on ModuleNotFoundError deep inside bot.main.
+# ---------------------------------------------------------------------------
+def _deps_available() -> bool:
+    try:
+        import aiokafka  # noqa: F401
+        import torch  # noqa: F401
+        import onnxruntime  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _candidate_interpreters() -> list[str]:
+    """Known-good interpreters, most specific first."""
+    cands = []
+    local_app = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Python"
+    for ver in ("Python312", "Python313", "Python311"):
+        exe = local_app / ver / "python.exe"
+        if exe.exists():
+            cands.append(str(exe))
+    for v in ("3.12", "3.13", "3.11"):
+        cands.append(f"py -{v}")  # resolved via the py launcher below
+    return cands
+
+
+def _ensure_interpreter() -> None:
+    if _deps_available():
+        return
+    import shutil
+    import subprocess
+
+    for cand in _candidate_interpreters():
+        if cand.startswith("py "):
+            if not shutil.which("py"):
+                continue
+            cmd = ["py", cand.split(" ", 1)[1]]
+        else:
+            cmd = [cand]
+        probe = subprocess.run(
+            cmd + ["-c", "import aiokafka, torch, onnxruntime"],
+            capture_output=True,
+        )
+        if probe.returncode != 0:
+            continue
+        print(f"[run_bot] current interpreter ({sys.executable}) is missing "
+              f"dependencies — re-launching with: {' '.join(cmd)}", flush=True)
+        os.execv(cmd[0], cmd + [str(Path(__file__).resolve())] + sys.argv[1:])
+    sys.exit(
+        "[run_bot] FATAL: no interpreter with the bot dependencies found.\n"
+        "  Install them into your default python:  python -m pip install -r "
+        "requirements.txt\n"
+        "  or launch with the known-good interpreter:  "
+        "%LOCALAPPDATA%\\Programs\\Python\\Python312\\python.exe run_bot.py"
+    )
+
+
+_ensure_interpreter()
+
+
 def _ensure_token() -> None:
     """BOT_ACCESS_TOKEN must be set; fall back to the saved jwt.txt."""
     if os.environ.get("BOT_ACCESS_TOKEN"):
