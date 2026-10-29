@@ -180,8 +180,9 @@ def test_short_engine_block_parsed_from_yaml() -> None:
     s = load_settings("configs/default.yaml")
     se = s.strategy.short_engine
     assert se is not None
-    # disabled by default until diagnostics validate the bearish tail
-    assert se.enabled is False and se.mode == "off"
+    # live-enabled in independent mode (user request 2026-10-30); strict
+    # 0.85 entry threshold + tight caps keep it a low-exposure module
+    assert se.enabled is True and se.mode == "independent"
     assert se.entry_threshold == pytest.approx(0.85)
     assert se.exit_threshold == pytest.approx(0.40)
     assert se.adverse_stop_pct == pytest.approx(0.10)
