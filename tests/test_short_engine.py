@@ -228,8 +228,7 @@ def test_risk_per_name_short_cap_aligns_with_engine() -> None:
     s = load_settings("configs/default.yaml")
     assert s.risk.max_short_single >= s.strategy.short_engine.max_weight_short
     rm = RiskManager(s.risk, None)  # no settlement calendar in test
-    ledger = Ledger(cash=1_000_000.0)
-    ledger.equity = 1_000_000.0
+    ledger = Ledger(initial_cash=1_000_000.0)
     # a 9% single-name short passes; an 11% one is denied
     assert rm.check_short(ledger, "AAA", 90, 1000.0, __import__("datetime").date(2026, 1, 5)).allowed
     assert not rm.check_short(ledger, "AAA", 110, 1000.0, __import__("datetime").date(2026, 1, 5)).allowed
