@@ -8,8 +8,8 @@ import pytest
 from bot.config import Settings
 from bot.contracts import DayBundle, NewsFlashData, PriceTickData
 from bot.signals import (
-    EventTagger, MarketState, NEUTRAL, RegimeFilter, RegimeVerdict,
-    RISK_OFF, RISK_ON, RulesFallback, SignalsBundle, SignalsEnsemble,
+    EventTagger, NEUTRAL, RISK_OFF, RISK_ON,
+    RulesFallback, SignalsBundle, SignalsEnsemble,
     VolatilityModule,
 )
 from bot.signals.ensemble import EnsembleEval
@@ -34,20 +34,17 @@ def _bundle(ticks: dict[str, PriceTickData], news=None) -> DayBundle:
 
 
 # ---------------------------------------------------------------------- bundle
-def test_signals_bundle_update_for_day_feeds_everything():
+def test_signals_bundle_update_volatility_only():
     s = Settings(env="sandbox", server_ip="127.0.0.1", team_username="t",
                  bot_access_token="x")
     bundle = SignalsBundle(
         tagger=EventTagger(),
-        regime_filter=RegimeFilter(s.signals.regime),
         volatility=VolatilityModule(),
         rules=RulesFallback(),
         ensemble=SignalsEnsemble(s.signals),
-        market_state=MarketState(),
     )
     ticks = {f"T{i}": _tick(f"T{i}", 100.0 + i) for i in range(5)}
-    v = bundle.update_for_day(date(2025, 1, 1), ticks)
-    assert isinstance(v, RegimeVerdict)
+    bundle.update_volatility(date(2025, 1, 1), ticks)
     assert bundle.volatility.vol("T0") == pytest.approx(0.02)  # fallback before warmup
 
 
@@ -57,9 +54,7 @@ def test_ensemble_evaluate_with_no_model_fns_uses_rules_fallback():
                  bot_access_token="x")
     ens = SignalsEnsemble(s.signals)
     ticks = {f"T{i}": _tick(f"T{i}", 100.0 + i) for i in range(3)}
-    verdict = RegimeVerdict(regime=NEUTRAL, candidate=NEUTRAL,
-                            held_since=None, days_in_current=0,
-                            confidence=0.0, reason="test")
+    verdict = NEUTRAL
     evals = ens.evaluate(_bundle(ticks), verdict)
     assert len(evals) == 3
     for ev in evals:
@@ -74,9 +69,7 @@ def test_ensemble_score_is_clamped():
     # News with a -2 tag should produce a non-zero negative news sub-score
     news = [_news("T0", "SEBI probe on insider trading")]
     ticks = {"T0": _tick("T0", 100.0)}
-    verdict = RegimeVerdict(regime=NEUTRAL, candidate=NEUTRAL,
-                            held_since=None, days_in_current=0,
-                            confidence=0.0, reason="test")
+    verdict = NEUTRAL
     evals = ens.evaluate(_bundle(ticks, news), verdict)
     assert all(-1.0 <= ev.score <= 1.0 for ev in evals)
     assert evals[0].news_score < 0
@@ -87,12 +80,8 @@ def test_ensemble_risk_off_dampens_score():
                  bot_access_token="x")
     ens = SignalsEnsemble(s.signals)
     ticks = {"T0": _tick("T0", 100.0)}
-    neutral_v = RegimeVerdict(regime=NEUTRAL, candidate=NEUTRAL,
-                              held_since=None, days_in_current=0,
-                              confidence=0.0, reason="test")
-    riskoff_v = RegimeVerdict(regime=RISK_OFF, candidate=RISK_OFF,
-                              held_since=None, days_in_current=0,
-                              confidence=0.0, reason="test")
+    neutral_v = NEUTRAL
+    riskoff_v = RISK_OFF
     evals_n = ens.evaluate(_bundle(ticks), neutral_v)
     evals_o = ens.evaluate(_bundle(ticks), riskoff_v)
     # With no models, the rules raw is 0.0; but the regime multiplier still
@@ -108,9 +97,7 @@ def test_ensemble_sub_scorer_failure_does_not_crash():
     news_fn = lambda b: {"T0": 0.5, "T1": -0.5}
     ens = SignalsEnsemble(s.signals, rank_fn=rank_fn, news_fn=news_fn)
     ticks = {"T0": _tick("T0", 100.0), "T1": _tick("T1", 100.0)}
-    verdict = RegimeVerdict(regime=NEUTRAL, candidate=NEUTRAL,
-                            held_since=None, days_in_current=0,
-                            confidence=0.0, reason="test")
+    verdict = NEUTRAL
     # rank_fn blew up -> rank treated as missing; news_fn ok
     evals = ens.evaluate(_bundle(ticks), verdict)
     assert len(evals) == 2
@@ -130,9 +117,7 @@ def test_ensemble_weights_renormalised_when_one_missing():
     mom_fn = lambda b: {t: 0.0 for t in b.ticks}
     ens = SignalsEnsemble(s.signals, news_fn=news_fn, mom_fn=mom_fn)
     ticks = {"T0": _tick("T0", 100.0)}
-    verdict = RegimeVerdict(regime=NEUTRAL, candidate=NEUTRAL,
-                            held_since=None, days_in_current=0,
-                            confidence=0.0, reason="test")
+    verdict = NEUTRAL
     evals = ens.evaluate(_bundle(ticks), verdict)
     # news=1.0, mom=0.0; rank missing -> only news + mom contribute;
     # weights renormalise over {news=0.35, mom=0.20} -> effective news=0.35/0.55
@@ -151,9 +136,7 @@ def test_ensemble_pure_rules_path_when_no_sub_scorers():
         bundle = _bundle({"T0": _tick("T0", 100.0 + i * 0.5)}, [])
         rb.evaluate_day(bundle)
     final_bundle = _bundle({"T0": _tick("T0", 130.0)}, [])
-    verdict = RegimeVerdict(regime=NEUTRAL, candidate=NEUTRAL,
-                            held_since=None, days_in_current=0,
-                            confidence=0.0, reason="test")
+    verdict = NEUTRAL
     evals = ens.evaluate(final_bundle, verdict)
     assert evals[0].score > 0  # positive trend + neutral regime -> positive
 
@@ -163,10 +146,8 @@ def test_ensemble_regime_gross_target_lookup():
                  bot_access_token="x")
     ens = SignalsEnsemble(s.signals)
     gross_table = {"risk_on": 0.92, "neutral": 0.75, "risk_off": 0.40}
-    v_on = RegimeVerdict(regime=RISK_ON, candidate=RISK_ON, held_since=None,
-                          days_in_current=0, confidence=0.0, reason="")
-    v_off = RegimeVerdict(regime=RISK_OFF, candidate=RISK_OFF, held_since=None,
-                           days_in_current=0, confidence=0.0, reason="")
+    v_on = RISK_ON
+    v_off = RISK_OFF
     assert ens.regime_gross_target(v_on, gross_table) == pytest.approx(0.92)
     assert ens.regime_gross_target(v_off, gross_table) == pytest.approx(0.40)
 
@@ -177,11 +158,9 @@ def test_full_pipeline_runs_through_signals_bundle():
                  bot_access_token="x")
     bundle_obj = SignalsBundle(
         tagger=EventTagger(),
-        regime_filter=RegimeFilter(s.signals.regime),
         volatility=VolatilityModule(),
         rules=RulesFallback(),
         ensemble=SignalsEnsemble(s.signals),
-        market_state=MarketState(),
     )
     # 25 days of slow rally
     from datetime import timedelta
@@ -190,8 +169,8 @@ def test_full_pipeline_runs_through_signals_bundle():
         ticks = {f"T{j:02d}": _tick(f"T{j:02d}", 100.0 + i * 0.3 + j * 0.1)
                  for j in range(10)}
         b = _bundle(ticks, news=[_news("T00", "profit surges")] if i == 24 else [])
-        verdict = bundle_obj.update_for_day(b.simulated_date, ticks)
-        evals = bundle_obj.ensemble.evaluate(b, verdict)
+        bundle_obj.update_volatility(b.simulated_date, ticks)
+        evals = bundle_obj.ensemble.evaluate(b, NEUTRAL)
         # Each day: 10 evals, all in [-1, 1]
         assert len(evals) == 10
         assert all(-1.0 <= ev.score <= 1.0 for ev in evals)

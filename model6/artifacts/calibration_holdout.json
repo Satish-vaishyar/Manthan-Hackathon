@@ -1,0 +1,270 @@
+{
+  "fitted_on": "dates < 2025-06-24",
+  "shrinkage_k": 20,
+  "events": {
+    "EARNINGS_BEAT": {
+      "prior_bps": 80.0,
+      "count": 1,
+      "n_eff": 0.12,
+      "mean_bps": 6.7,
+      "t_stat": null,
+      "posterior_bps": 79.5
+    },
+    "EARNINGS_MISS": {
+      "prior_bps": -120.0,
+      "count": 2,
+      "n_eff": 0.19,
+      "mean_bps": 36.2,
+      "t_stat": 0.14,
+      "posterior_bps": -118.6
+    },
+    "GUIDANCE_UP": {
+      "prior_bps": 100.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": 100.0
+    },
+    "GUIDANCE_DOWN": {
+      "prior_bps": -150.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": -150.0
+    },
+    "DIVIDEND": {
+      "prior_bps": 20.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": 20.0
+    },
+    "BUYBACK": {
+      "prior_bps": 40.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": 40.0
+    },
+    "CONTRACT_WIN": {
+      "prior_bps": 60.0,
+      "count": 1,
+      "n_eff": 0.25,
+      "mean_bps": 246.9,
+      "t_stat": null,
+      "posterior_bps": 62.3
+    },
+    "PARTNERSHIP": {
+      "prior_bps": 30.0,
+      "count": 7,
+      "n_eff": 3.12,
+      "mean_bps": 26.2,
+      "t_stat": 0.48,
+      "posterior_bps": 29.5
+    },
+    "PRODUCT_LAUNCH": {
+      "prior_bps": 15.0,
+      "count": 1,
+      "n_eff": 0.12,
+      "mean_bps": 58.7,
+      "t_stat": null,
+      "posterior_bps": 15.3
+    },
+    "APPROVAL": {
+      "prior_bps": 100.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": 100.0
+    },
+    "REJECTION": {
+      "prior_bps": -200.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": -200.0
+    },
+    "MNA_TARGET": {
+      "prior_bps": 300.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": 300.0
+    },
+    "MNA_ACQUIRER": {
+      "prior_bps": -30.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": -30.0
+    },
+    "ANALYST_UPGRADE": {
+      "prior_bps": 60.0,
+      "count": 1,
+      "n_eff": 0.25,
+      "mean_bps": 81.7,
+      "t_stat": null,
+      "posterior_bps": 60.3
+    },
+    "ANALYST_DOWNGRADE": {
+      "prior_bps": -80.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": -80.0
+    },
+    "VALUATION_CONCERN": {
+      "prior_bps": -20.0,
+      "count": 3,
+      "n_eff": 1.4,
+      "mean_bps": 41.0,
+      "t_stat": 12.05,
+      "posterior_bps": -16.0
+    },
+    "REGULATORY_ACTION": {
+      "prior_bps": -100.0,
+      "count": 9,
+      "n_eff": 3.38,
+      "mean_bps": -205.7,
+      "t_stat": -1.85,
+      "posterior_bps": -115.3
+    },
+    "LEGAL_WIN": {
+      "prior_bps": 50.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": 50.0
+    },
+    "MGMT_EXIT": {
+      "prior_bps": -60.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": -60.0
+    },
+    "MGMT_HIRE": {
+      "prior_bps": 10.0,
+      "count": 1,
+      "n_eff": 0.25,
+      "mean_bps": -8.8,
+      "t_stat": null,
+      "posterior_bps": 9.8
+    },
+    "LAYOFFS": {
+      "prior_bps": 10.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": 10.0
+    },
+    "DEBT_DISTRESS": {
+      "prior_bps": -300.0,
+      "count": 2,
+      "n_eff": 0.25,
+      "mean_bps": 38.9,
+      "t_stat": 1.4,
+      "posterior_bps": -295.8
+    },
+    "CAPITAL_RAISE": {
+      "prior_bps": -150.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": -150.0
+    },
+    "INSIDER_SELL": {
+      "prior_bps": -30.0,
+      "count": 1,
+      "n_eff": 1.0,
+      "mean_bps": 34.4,
+      "t_stat": null,
+      "posterior_bps": -26.9
+    },
+    "INSIDER_BUY": {
+      "prior_bps": 40.0,
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": 40.0
+    },
+    "SAFETY_BREACH": {
+      "prior_bps": -80.0,
+      "count": 2,
+      "n_eff": 0.38,
+      "mean_bps": -22.6,
+      "t_stat": -0.31,
+      "posterior_bps": -78.9
+    },
+    "LABOR_STRIKE": {
+      "prior_bps": -40.0,
+      "count": 1,
+      "n_eff": 0.25,
+      "mean_bps": 246.9,
+      "t_stat": null,
+      "posterior_bps": -36.5
+    },
+    "EXPANSION": {
+      "prior_bps": 30.0,
+      "count": 7,
+      "n_eff": 1.07,
+      "mean_bps": 22.5,
+      "t_stat": 0.4,
+      "posterior_bps": 29.6
+    },
+    "DEMAND_STRONG": {
+      "prior_bps": 40.0,
+      "count": 3,
+      "n_eff": 2.12,
+      "mean_bps": 232.0,
+      "t_stat": 1.31,
+      "posterior_bps": 58.4
+    },
+    "DEMAND_WEAK": {
+      "prior_bps": -60.0,
+      "count": 1,
+      "n_eff": 0.12,
+      "mean_bps": -57.8,
+      "t_stat": null,
+      "posterior_bps": -60.0
+    },
+    "STOCK_UP": {
+      "prior_bps": 20.0,
+      "count": 5,
+      "n_eff": 2.11,
+      "mean_bps": 174.7,
+      "t_stat": 0.71,
+      "posterior_bps": 34.8
+    },
+    "STOCK_DOWN": {
+      "prior_bps": -20.0,
+      "count": 3,
+      "n_eff": 0.75,
+      "mean_bps": -168.1,
+      "t_stat": -1.19,
+      "posterior_bps": -25.4
+    },
+    "MACRO_TRADE": {
+      "prior_bps": -30.0,
+      "count": 4,
+      "n_eff": 0.75,
+      "mean_bps": 22.1,
+      "t_stat": 0.24,
+      "posterior_bps": -28.1
+    }
+  }
+}

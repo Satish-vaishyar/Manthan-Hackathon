@@ -1,0 +1,51 @@
+{
+  "data": {
+    "items": 410,
+    "dates": 41,
+    "eval_from": "2025-06-24",
+    "items_with_any_event": 89,
+    "relevant_items": 62
+  },
+  "holdout_prior_only": {
+    "ticker_days": 120,
+    "with_event": 24,
+    "coverage": 0.2,
+    "event_score": {
+      "ic_spearman": 0.09718920926459654,
+      "hit_rate": 0.4583333333333333,
+      "mean_y_bps_when_positive": -86.17966903445269,
+      "mean_y_bps_when_negative": -50.869753444201294,
+      "n_positive": 13,
+      "n_negative": 11
+    },
+    "rule_polarity": {
+      "ic_spearman": -0.002187749127024554,
+      "hit_rate": 0.391304347826087,
+      "mean_y_bps_when_positive": -94.80327840631745,
+      "mean_y_bps_when_negative": -48.24560010810059,
+      "n_positive": 13,
+      "n_negative": 10
+    }
+  },
+  "holdout_calibrated": {
+    "ticker_days": 120,
+    "with_event": 24,
+    "coverage": 0.2,
+    "event_score": {
+      "ic_spearman": 0.07181723511815982,
+      "hit_rate": 0.4583333333333333,
+      "mean_y_bps_when_positive": -86.17966903445269,
+      "mean_y_bps_when_negative": -50.869753444201294,
+      "n_positive": 13,
+      "n_negative": 11
+    },
+    "rule_polarity": {
+      "ic_spearman": -0.002187749127024554,
+      "hit_rate": 0.391304347826087,
+      "mean_y_bps_when_positive": -94.80327840631745,
+      "mean_y_bps_when_negative": -48.24560010810059,
+      "n_positive": 13,
+      "n_negative": 10
+    }
+  }
+}

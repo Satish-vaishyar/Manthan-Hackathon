@@ -127,25 +127,6 @@ class SettlementSettings:
 
 
 @dataclass
-class RegimeSettings:
-    """M3 — risk-on / neutral / risk-off (docs/05 §5)."""
-
-    # Hysteresis: must hold `hold_days` consecutive days before switching.
-    hold_days: int = 2
-    # Inputs (per docs/05 §5):
-    breadth_risk_off: float = 0.35   # breadth_pct < this AND market_20d_ret < 0 -> risk-off
-    breadth_risk_on: float = 0.60    # breadth_pct > this AND market_20d_ret > 0 -> risk-on
-    # Vol regime: market_vol > vol_spike_mult × 120-d median vol -> risk-off
-    vol_spike_mult: float = 1.5
-    # History window for breadth + vol median
-    breadth_window_days: int = 50    # SMA window for "price > SMA" breadth
-    market_vol_window_days: int = 20
-    market_vol_median_window: int = 120
-    # If we have < this many market days of history, stay neutral (no regime call yet)
-    warmup_days: int = 20
-
-
-@dataclass
 class EventTaggerSettings:
     """M1a — keyword tagger (docs/05 §3.1)."""
 
@@ -169,9 +150,13 @@ class SectorClusterSettings:
 
 @dataclass
 class SignalsSettings:
-    """Container for the M3/M4/M1a + sector clustering + ensemble knobs."""
+    """Container for the M1a + sector clustering + ensemble knobs.
 
-    regime: RegimeSettings = field(default_factory=RegimeSettings)
+    M5 regime detection (bot.models.regime.RegimeDetector) owns its own
+    `RegimeConfig` defaults and is wired directly by bot.main.TradingBot —
+    no regime section here.
+    """
+
     event_tagger: EventTaggerSettings = field(default_factory=EventTaggerSettings)
     sector_cluster: SectorClusterSettings = field(default_factory=SectorClusterSettings)
     # Ensemble weights (sum need not be 1; we renormalise over the signals we have).
@@ -275,11 +260,8 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
         if "weights" in sig:
             s.signals.weights = {k: float(v) for k, v in sig["weights"].items()}
             sig.pop("weights")
-        # Nested: regime / event_tagger / sector_cluster
+        # `regime` key in YAML is now ignored — M5 owns its own RegimeConfig.
         if "regime" in sig:
-            s.signals.regime = RegimeSettings(
-                **{k: v for k, v in sig["regime"].items() if k in RegimeSettings.__dataclass_fields__}
-            )
             sig.pop("regime")
         if "event_tagger" in sig:
             s.signals.event_tagger = EventTaggerSettings(
@@ -294,7 +276,6 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
         s.signals = SignalsSettings(
             **{k: v for k, v in sig.items() if k in SignalsSettings.__dataclass_fields__},
             weights=s.signals.weights,
-            regime=s.signals.regime,
             event_tagger=s.signals.event_tagger,
             sector_cluster=s.signals.sector_cluster,
         )

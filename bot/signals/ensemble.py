@@ -1,4 +1,4 @@
-"""bot.signals.ensemble — SignalsEnsemble: regime + rank + news + mom + sector.
+"""bot.signals.ensemble — SignalsEnsemble: rank + news + mom + regime gating.
 
 Per docs/04 §4 + docs/05 §5 + docs/08 P1-08:
     - Combines rank_fn (model1), news_fn (model2 + tagger fallback), momentum
@@ -18,6 +18,12 @@ Graceful degradation (P1-08 acceptance criterion):
 The "missing signal" path is the P0 path: rules + tagger + vol, no model
 artifacts, and the bot still trades. The full path (model1+2+3 artifacts
 present) replaces each sub-scorer without changing call signatures.
+
+Regime input contract (post-M5):
+    - `evaluate(bundle, regime)` receives a regime LABEL string
+      ('risk_on' / 'neutral' / 'risk_off'). The label comes from
+      `bot.models.regime.RegimeDetector.update(bundle)`. This is the same
+      three-label vocabulary as before — only the call shape is narrower.
 """
 from __future__ import annotations
 
@@ -28,7 +34,7 @@ import structlog
 
 from ..config import SignalsSettings
 from ..contracts import DayBundle
-from .regime import NEUTRAL, RegimeVerdict, gross_long_target
+from ..models.regime import NEUTRAL
 from .rules_fallback import RulesFallback, TickerEval
 
 _log = structlog.get_logger("signals.ensemble")
@@ -67,7 +73,7 @@ class SignalsEnsemble:
 
     Use:
         ens = SignalsEnsemble(settings, rank_fn=..., news_fn=..., mom_fn=...)
-        evals = ens.evaluate(bundle, regime_verdict)
+        evals = ens.evaluate(bundle, regime_label)
         # evals: list[EnsembleEval], one per ticker in bundle.ticks
     """
 
@@ -97,10 +103,11 @@ class SignalsEnsemble:
             return {}
 
     def evaluate(self, bundle: DayBundle,
-                 regime: RegimeVerdict) -> list[EnsembleEval]:
+                 regime: str = NEUTRAL) -> list[EnsembleEval]:
         """Score the day, returning one EnsembleEval per ticker.
 
-        `regime` must be the day's verdict (from `RegimeFilter.update`).
+        `regime` is the day's label ('risk_on' / 'neutral' / 'risk_off'),
+        normally produced by `bot.models.regime.RegimeDetector.update(bundle)`.
         """
         # 1) Sub-scores (missing signal -> {})
         rank_scores = self._safe("rank", self.rank_fn, bundle)
@@ -140,14 +147,14 @@ class SignalsEnsemble:
                 raw = (w_rank * r + w_news * n + w_mom * m) / w_sum
 
             # Regime gating — multiply raw by regime multiplier, preserve sign
-            reg_mult = _REGIME_SIGN.get(regime.regime, _REGIME_SIGN[NEUTRAL])
+            reg_mult = _REGIME_SIGN.get(regime, _REGIME_SIGN[NEUTRAL])
             score = max(-1.0, min(1.0, raw * reg_mult))
 
             reasons: list[str] = []
             if rule_eval is not None:
                 reasons.extend(rule_eval.reasons)
-            if regime.regime != NEUTRAL:
-                reasons.append(f"regime={regime.regime} (mult={reg_mult:.2f})")
+            if regime != NEUTRAL:
+                reasons.append(f"regime={regime} (mult={reg_mult:.2f})")
             if not rank_scores:
                 reasons.append("rank:rules")
             if not news_scores:
@@ -156,13 +163,14 @@ class SignalsEnsemble:
             out.append(EnsembleEval(
                 ticker=t, score=score, raw_score=max(-1.0, min(1.0, raw)),
                 rank_score=r, news_score=n, momentum_score=m,
-                regime=regime.regime, reasons=reasons,
+                regime=regime, reasons=reasons,
             ))
         return out
 
     # ------------------------------------------------------------------
-    def regime_gross_target(self, regime: RegimeVerdict,
+    def regime_gross_target(self, regime: str,
                             gross_table: dict[str, float]) -> float:
         """Convenience: regime -> gross long target from the risk settings."""
-        return gross_long_target(regime.regime, gross_table,
-                                 default=0.75)
+        if regime not in gross_table:
+            return 0.75
+        return max(0.0, min(1.0, float(gross_table[regime])))

@@ -1,0 +1,29 @@
+# model6 — Event Tagger: settings for calibration, evaluation and scoring.
+data:
+  news_csv: data/raw/news.csv             # from model2/src/consolidate.py (refresh after every new recording)
+  prices_csv: data/raw/prices.csv
+  aliases_auto: data/raw/aliases_auto.json
+  aliases_manual: configs/aliases_manual.json
+  max_gap_days: 5                         # label only if the next candle is <= 5 calendar days later
+  label_clip: 0.15
+  calib_fraction: 0.7                     # first 70% of dates calibrate impacts, last 30% evaluate them
+
+tagger:
+  headline_weight: 1.0                    # a match in the headline counts fully
+  description_weight: 0.5                 # a match only in the description counts half
+  relevant_weight: 1.0                    # item mentions the company (symbol or alias)
+  irrelevant_weight: 0.25                 # item doesn't mention it (most streamed headlines)
+  max_magnitude: 2.0                      # cap on the % / amount magnitude multiplier
+
+calibration:
+  shrinkage_k: 20                         # pseudo-observations given to the expert prior per event
+  min_count_report: 3
+
+scoring:
+  scale_bps: 150                          # event_score = tanh(sum of weighted impacts / scale)
+  top_events: [EARNINGS_BEAT, EARNINGS_MISS, GUIDANCE_UP, GUIDANCE_DOWN, CONTRACT_WIN, PARTNERSHIP,
+               REGULATORY_ACTION, MGMT_EXIT, DEBT_DISTRESS, CAPITAL_RAISE, ANALYST_UPGRADE, ANALYST_DOWNGRADE,
+               MNA_TARGET, STOCK_UP, STOCK_DOWN, DEMAND_STRONG]
+
+export:
+  out_dir: artifacts

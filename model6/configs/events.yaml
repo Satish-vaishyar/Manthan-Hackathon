@@ -1,0 +1,204 @@
+# model6 — event taxonomy.
+# Each event: polarity (+1 / -1 / 0), prior_bps = assumed next-day excess-return impact before calibration
+# (expert prior, replaced by data via shrinkage in src/calibrate.py), and regex patterns (case-insensitive,
+# matched on cleaned "headline" and "description"; "the company" is what the company's own name is masked to).
+# Keep patterns specific: a false tag costs more than a missed one.
+
+events:
+  EARNINGS_BEAT:
+    polarity: 1
+    prior_bps: 80
+    patterns:
+      - '\b(profit|earnings|revenue|sales|income|eps)\b[^.]{0,40}\b(surges?|soars?|jumps?|rises?|climbs?|beats?|tops?|doubles?|record)\b'
+      - '\b(beats?|tops?|exceeds?|surpass(es)?)\b[^.]{0,30}\b(estimates|expectations|forecasts?|consensus)\b'
+      - '\brecord (quarterly |annual )?(profit|revenue|sales|earnings|results)\b'
+  EARNINGS_MISS:
+    polarity: -1
+    prior_bps: -120
+    patterns:
+      - '\b(profit|earnings|revenue|sales|income|eps)\b[^.]{0,40}\b(falls?|drops?|declines?|slumps?|plunges?|misses?|shrinks?|tumbles?)\b'
+      - '\b(misses?|falls? short of|below)\b[^.]{0,30}\b(estimates|expectations|forecasts?|consensus)\b'
+      - '\b(quarterly|annual|net) loss\b|\bloss widens\b|\bswings? to (a )?loss\b'
+  GUIDANCE_UP:
+    polarity: 1
+    prior_bps: 100
+    patterns:
+      - '\b(raises?|lifts?|boosts?|ups|increases?)\b[^.]{0,25}\b(guidance|outlook|forecast|target)\b'
+  GUIDANCE_DOWN:
+    polarity: -1
+    prior_bps: -150
+    patterns:
+      - '\b(cuts?|lowers?|slashes?|trims?|reduces?|withdraws?)\b[^.]{0,25}\b(guidance|outlook|forecast)\b'
+      - '\bprofit warning\b|\bwarns? (of|on) (lower|weak|weaker)\b'
+  DIVIDEND:
+    polarity: 1
+    prior_bps: 20
+    patterns:
+      - '\b(declares?|announces?|raises?|hikes?|increases?)\b[^.]{0,25}\bdividend\b'
+      - '\b(interim|special|final) dividend\b|\bbonus (issue|shares)\b'
+  BUYBACK:
+    polarity: 1
+    prior_bps: 40
+    patterns:
+      - '\b(share|stock) (buyback|repurchase)\b|\bbuy ?back\b|\brepurchase program\b'
+  CONTRACT_WIN:
+    polarity: 1
+    prior_bps: 60
+    patterns:
+      - '\b(wins?|won|bags?|secures?|awarded|lands?|clinches?)\b[^.]{0,40}\b(contract|order|deal|tender|task order|bid)\b'
+      - '\b(contract|order|deal) (worth|valued at)\b'
+  PARTNERSHIP:
+    polarity: 1
+    prior_bps: 30
+    patterns:
+      - '\b(strategic )?(partnership|collaboration|alliance|joint venture)\b'
+      - '\b(partners?|teams? up|ties? up|joins? forces) with\b'
+  PRODUCT_LAUNCH:
+    polarity: 1
+    prior_bps: 15
+    patterns:
+      - '\b(launch(es|ed)?|unveils?|rolls? out|introduces?|debuts?)\b[^.]{0,30}\b(new|its|first|latest|ai|platform|model|product|service)\b'
+  APPROVAL:
+    polarity: 1
+    prior_bps: 100
+    patterns:
+      - '\b(fda|regulator|regulatory|government|eu|ema|cdsco|sebi)\b[^.]{0,30}\b(approv(es|al|ed)|clears?|clearance|nod)\b'
+      - '\b(wins?|receives?|gets?|secures?)\b[^.]{0,20}\b(approval|clearance|licen[cs]e|permit)\b'
+  REJECTION:
+    polarity: -1
+    prior_bps: -200
+    patterns:
+      - '\b(rejects?|denies|denied|refuses?|blocks?)\b[^.]{0,30}\b(approval|application|merger|deal|licen[cs]e)\b'
+      - '\b(trial|study) (fails?|failed|misses?)\b|\bcomplete response letter\b'
+  MNA_TARGET:
+    polarity: 1
+    prior_bps: 300
+    patterns:
+      - '\b(to be acquired|agrees? to be (bought|acquired)|takeover (bid|offer|approach)|buyout offer|tender offer for the company)\b'
+      - '\b(bid|offer) for the company\b'
+  MNA_ACQUIRER:
+    polarity: 0
+    prior_bps: -30
+    patterns:
+      - '\bthe company\b[^.]{0,20}\b(to acquire|acquires?|to buy|buys|agrees? to buy|merger with|to merge with)\b'
+  ANALYST_UPGRADE:
+    polarity: 1
+    prior_bps: 60
+    patterns:
+      - '\bupgraded?\b|\b(raises?|lifts?|boosts?) (its |the )?(price )?target\b|\b(initiates?|starts?)[^.]{0,20}\b(buy|outperform|overweight)\b'
+  ANALYST_DOWNGRADE:
+    polarity: -1
+    prior_bps: -80
+    patterns:
+      - '\bdowngraded?\b|\b(cuts?|lowers?|slashes?) (its |the )?(price )?target\b|\b(sell|underperform|underweight) rating\b'
+  VALUATION_CONCERN:
+    polarity: -1
+    prior_bps: -20
+    patterns:
+      - '\b(overpriced|overvalued|too expensive|bubble)\b'
+  REGULATORY_ACTION:
+    polarity: -1
+    prior_bps: -100
+    patterns:
+      - '\b(probe|investigation|investigated|raid(ed|s)?|subpoena|antitrust|show[- ]cause|indicted|charged)\b'
+      - '\b(fined?|penalty|penalised|penalized|sanctioned)\b'
+      - '\b(lawsuit|sued|sues|class action|litigation)\b'
+  LEGAL_WIN:
+    polarity: 1
+    prior_bps: 50
+    patterns:
+      - '\b(wins?|won)\b[^.]{0,20}\b(case|lawsuit|appeal|ruling|copyright fight)\b|\b(charges|case) (dropped|dismissed)\b|\bcleared of\b'
+  MGMT_EXIT:
+    polarity: -1
+    prior_bps: -60
+    patterns:
+      - '\b(ceo|cfo|chief executive|chairman|chair|president|founder|director)\b[^.]{0,30}\b(resigns?|steps? down|quits?|ousted|fired|departs?|exits?)\b'
+      - '\b(resigns?|steps? down) as (ceo|cfo|chief executive|chairman)\b'
+  MGMT_HIRE:
+    polarity: 1
+    prior_bps: 10
+    patterns:
+      - '\b(appoints?|names?|hires?|taps?)\b[^.]{0,30}\b(ceo|cfo|chief executive|chairman|president)\b'
+  LAYOFFS:
+    polarity: 0
+    prior_bps: 10
+    patterns:
+      - '\b(layoffs?|lays? off|job cuts?|cuts? \d[\d,]* jobs|restructuring|workforce reduction)\b'
+  DEBT_DISTRESS:
+    polarity: -1
+    prior_bps: -300
+    patterns:
+      - '\b(default(s|ed)?|bankruptcy|chapter 11|insolvency|nclt|administration|liquidity crunch|missed (a )?(bond|debt|interest) payment)\b'
+      - '\b(credit rating|rating)\b[^.]{0,20}\b(cut|downgrade|junk)\b'
+  CAPITAL_RAISE:
+    polarity: -1
+    prior_bps: -150
+    patterns:
+      - '\b(registered direct offering|public offering|share offering|stock offering|secondary offering|rights issue|qip|placement)\b'
+      - '\braises? \$?[\d.,]+ ?(million|billion|m|bn|crore)\b[^.]{0,30}\b(offering|shares|stock)\b'
+  INSIDER_SELL:
+    polarity: -1
+    prior_bps: -30
+    patterns:
+      - '\b(ceo|cfo|insider|founder|director|executive)\b[^.]{0,40}\b(sells?|sold|stock sale|share sale|dumps?|unloads?|nets?)\b'
+      - '\b(stake sale|block sale|promoter sells?)\b'
+  INSIDER_BUY:
+    polarity: 1
+    prior_bps: 40
+    patterns:
+      - '\b(ceo|cfo|insider|founder|director|promoter)\b[^.]{0,30}\b(buys?|bought|purchases?|increases? stake)\b'
+  SAFETY_BREACH:
+    polarity: -1
+    prior_bps: -80
+    patterns:
+      - '\b(recall(s|ed)?|outage|data breach|breach|hack(ed|s)?|cyberattack|ransomware|explosion|fire at|accident|crash(es|ed)? (kills|injures))\b'
+  LABOR_STRIKE:
+    polarity: -1
+    prior_bps: -40
+    patterns:
+      - '\b(strike|walkout|union action|work stoppage)\b'
+  EXPANSION:
+    polarity: 1
+    prior_bps: 30
+    patterns:
+      - '\b(new (plant|factory|facility|store|stores|data cent(er|re))|expansion|expands?|capex|opens?)\b'
+  DEMAND_STRONG:
+    polarity: 1
+    prior_bps: 40
+    patterns:
+      - '\b(record|strong|robust|booming|surging) (demand|orders|sales|bookings|growth|subscribers|box office)\b'
+      - '\b(boosts?|lifts?|drives?) (box office|sales|revenue|growth|returns)\b|\bmomentum\b'
+  DEMAND_WEAK:
+    polarity: -1
+    prior_bps: -60
+    patterns:
+      - '\b(weak|weaker|slowing|sluggish|falling|soft) (demand|orders|sales|bookings|growth|subscribers)\b'
+  STOCK_UP:
+    polarity: 1
+    prior_bps: 20
+    patterns:
+      - '\b(shares?|stock)\b[^.]{0,20}\b(surges?|soars?|jumps?|rall(y|ies)|rockets?|hits? (a )?record|climbs?)\b'
+  STOCK_DOWN:
+    polarity: -1
+    prior_bps: -20
+    patterns:
+      - '\b(shares?|stock)\b[^.]{0,20}\b(plunges?|tumbles?|sinks?|slumps?|crashes?|falls?|drops?|hit by)\b'
+  MACRO_TRADE:
+    polarity: -1
+    prior_bps: -30
+    patterns:
+      - '\b(tariffs?|sanctions|export (ban|controls?)|trade war|import duty)\b'
+
+# Words that flip/soften a match when they appear shortly before it ("denies probe", "no plans to cut").
+negation:
+  window_words: 4
+  # quoted on purpose: unquoted `no` is parsed by YAML as the boolean False
+  words: ['not', 'no', 'denies', 'denied', 'deny', 'rules out', 'ruled out', 'rejects claims', 'without', 'never',
+          'dismisses']
+  factor: -0.5
+
+# Words that make a report uncertain ("may", "reportedly") -> confidence multiplied by factor.
+hedging:
+  words: ['may', 'might', 'could', 'reportedly', 'rumou?rs?', 'considers?', 'considering', 'mulls?', 'explores?',
+          'plans? to', 'talks?', 'sources say', 'expected to', 'likely']
+  factor: 0.6

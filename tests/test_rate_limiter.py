@@ -11,18 +11,23 @@ from bot.execution.rate_limiter import RateLimiter
 
 @pytest.mark.asyncio
 async def test_burst_capacity_then_throttle():
-    rl = RateLimiter(rate_per_min=60, capacity=5)  # 1 token/sec
-    # Burst 5 should succeed immediately
+    # 120/min = 2 tokens/sec, capacity 3. After burst of 3 the next token
+    # should take ~500 ms to refill (deterministic under Windows scheduler).
+    rl = RateLimiter(rate_per_min=120, capacity=3)
+    # Burst 3 should succeed immediately
     start = time.perf_counter()
-    for _ in range(5):
+    for _ in range(3):
         assert await rl.acquire(priority="normal") is True
     burst_ms = (time.perf_counter() - start) * 1000.0
     assert burst_ms < 100.0  # should be fast
-    # 6th should wait
+    # 4th should wait ~500 ms
     start = time.perf_counter()
     assert await rl.acquire(priority="normal") is True
     waited_ms = (time.perf_counter() - start) * 1000.0
-    assert waited_ms > 800.0  # ~1 second wait
+    # 400 ms lower bound (500 ms target + 50 ms slack); still proves the
+    # throttling behavior — without throttling, the 4th acquire would
+    # complete in <50 ms.
+    assert waited_ms > 400.0, f"expected wait > 400 ms, got {waited_ms:.1f}"
 
 
 @pytest.mark.asyncio

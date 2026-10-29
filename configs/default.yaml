@@ -59,16 +59,6 @@ settlement:
   force_close_before_days: 2
 
 signals:
-  # M3 — rule-based regime filter (docs/05 §5)
-  regime:
-    hold_days: 2
-    breadth_risk_off: 0.35
-    breadth_risk_on: 0.60
-    vol_spike_mult: 1.5
-    breadth_window_days: 50
-    market_vol_window_days: 20
-    market_vol_median_window: 120
-    warmup_days: 20
   # M1a — keyword event tagger (docs/05 §3.1)
   event_tagger:
     magnitude_scale: 0.05
@@ -83,3 +73,4 @@ signals:
     min_df: 2
   # Ensemble weights (sum need not be 1; renormalised over available signals)
   weights: { rank: 0.45, news: 0.35, mom: 0.20 }
+  # M5 regime detection owns its own RegimeConfig — see bot.models.regime.

@@ -55,6 +55,8 @@ from .ingest.stage_watcher import StageWatcher
 from .journal.journal import DecisionJournal
 from .lifecycle import BotState, Lifecycle
 from .models.ensemble import Ensemble
+from .models.regime import RegimeDetector
+from .models.vol import VolEstimator
 from .portfolio.constructor import (
     PortfolioTarget,
     TickerScore,
@@ -68,7 +70,6 @@ from .portfolio.tax_engine import TaxEngineConfig
 from .signals import SignalsBundle
 from .signals.ensemble import SignalsEnsemble
 from .signals.event_tagger import EventTagger
-from .signals.regime import MarketState, NEUTRAL, RegimeFilter, RegimeVerdict
 from .signals.rules_fallback import RulesFallback
 from .signals.volatility import VolatilityModule
 
@@ -113,7 +114,8 @@ class TradingBot:
         self.validator = OrderValidator(settings, self.risk)
         self.ensemble = Ensemble(settings.strategy)
         # ------------------------------------------------------------------
-        # Signals package — M1a / M3 / M4 / R / ensemble (docs/05 §3, §5, §6)
+        # Signals package — M1a / M4 / R / ensemble (docs/05 §3, §5, §6).
+        # M5 regime detection lives in bot.models.regime — wired here.
         # ------------------------------------------------------------------
         self.event_tagger = EventTagger(
             magnitude_scale=settings.signals.event_tagger.magnitude_scale,
@@ -123,15 +125,14 @@ class TradingBot:
             fallback_vol=0.02,
             atr_window=14,
         )
-        # `self.vol` is kept as an alias for backwards compat with the M4
-        # inverse-vol sizing call sites in _on_day.
+        # Back-compat alias for any callers still referencing `self.vol`.
         self.vol = self.volatility.vol_estimator
-        self.regime_filter = RegimeFilter(settings.signals.regime)
-        self.market_state = MarketState()
+        # M5: market regime detector — gates gross long exposure.
+        self.regime = RegimeDetector()
         self.rules_fallback = RulesFallback(tagger=self.event_tagger)
-        # Try to wire model1 (ranker) + model2 (news scorer) if artifacts exist.
-        # Failures are caught -> SignalsEnsemble treats them as missing and
-        # falls back to the rules sub-scorers (P0 path).
+        # Optional model1 (ranker) + model2 (news scorer) loaders. Failures
+        # are caught -> SignalsEnsemble treats them as missing and falls back
+        # to the rules sub-scorers (P0 path).
         rank_fn = self._try_build_model1_fn()
         news_fn = self._try_build_model2_fn()
         self.signals_ensemble = SignalsEnsemble(
@@ -143,11 +144,9 @@ class TradingBot:
         )
         self.signals = SignalsBundle(
             tagger=self.event_tagger,
-            regime_filter=self.regime_filter,
             volatility=self.volatility,
             rules=self.rules_fallback,
             ensemble=self.signals_ensemble,
-            market_state=self.market_state,
         )
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=20_000)
         self.kafka = KafkaIngest(settings, self.queue)
@@ -417,12 +416,17 @@ class TradingBot:
         if self.lifecycle.state != BotState.TRADING:
             await self.lifecycle.wait_for(BotState.TRADING, timeout=2.0)
 
-        # 2) Feed the signals bundle (vol, market state, regime filter)
-        regime_verdict = self.signals.update_for_day(bundle.simulated_date, bundle.ticks)
+        # 2) Feed the signals bundle's per-ticker vol state. M5 regime runs
+        # below against the day's bundle directly.
+        self.signals.update_volatility(bundle.simulated_date, bundle.ticks)
 
-        # 3) Build scores via SignalsEnsemble (regime-gated, fail-soft)
+        # 3) Build scores via SignalsEnsemble (regime-gated, fail-soft).
+        # M5: regime detector runs against today's bundle; the label flows into
+        # build_target_weights via `regime=` + `gross_long_target=` so the
+        # constructor applies the regime scaling directly.
         try:
-            evals = self.signals_ensemble.evaluate(bundle, regime_verdict)
+            regime_label = self.regime.update(bundle)
+            evals = self.signals_ensemble.evaluate(bundle, regime_label)
         except Exception as e:  # noqa: BLE001
             _log.error("ensemble_failed", err=repr(e), component="strategy")
             return
@@ -439,24 +443,15 @@ class TradingBot:
             ))
 
         equity = self.ledger.equity or 1.0
-        # Regime scaling of gross long target (risk_off -> 40%, neutral -> 75%, risk_on -> 92%)
-        gross_table = self.settings.risk.gross_long_target
-        regime_target = self.signals_ensemble.regime_gross_target(regime_verdict, gross_table)
-        # Apply regime scaling by multiplying each weight by regime_target/0.75 (neutral baseline).
-        # The constructor accepts absolute weights and caps at max_weight_name,
-        # so the cleanest way is to scale target weights post-hoc.
+        # M5: regime + gross_long_target are applied inside build_target_weights.
         target_w = build_target_weights(
             scores_for_constructor, self.settings.strategy, equity,
+            regime=regime_label,
             sector_caps={"Tech": self.settings.risk.max_sector_weight,
                          "Finance": self.settings.risk.max_sector_weight},
             sector_of=self._sector_of,
+            gross_long_target=self.settings.risk.gross_long_target,
         )
-        scale = regime_target / 0.75 if 0.75 > 0 else 1.0
-        target_w = {t: w * scale for t, w in target_w.items()}
-        # Renormalise after scaling
-        total = sum(target_w.values())
-        if total > 0:
-            target_w = {t: w / total for t, w in target_w.items()}
         max_orders_remaining = await self.lifecycle.gate.orders_remaining(max_orders)
         deltas = build_trade_deltas(
             current_holdings={t: q for t, q in self.ledger.holdings.items()},
@@ -483,7 +478,7 @@ class TradingBot:
                 "mom": ev.momentum_score if ev else 0.0,
                 "ensemble": ev.score if ev else 0.0,
             }
-            reasons = (ev.reasons if ev else []) + [d.reason]
+            reasons = (ev.reasons if ev else []) + [d.reason, f"regime={regime_label}"]
             if self.settings.dry_run:
                 _log.info("dry_run_trade", ticker=d.ticker, action=d.action,
                           qty=d.qty, price=d.price, target_w=d.target_weight,
@@ -506,10 +501,8 @@ class TradingBot:
                 "source": "core",
                 "scores": {"rank": ev.rank_score, "news": ev.news_score,
                             "mom": ev.momentum_score, "ensemble": ev.score},
-                "regime": regime_verdict.regime,
-                "regime_target": regime_target,
-                "target_w": None, "current_w": None,
-                "reasons": ev.reasons, "shap_top3": [],
+                "regime": regime_label, "target_w": None, "current_w": None,
+                "reasons": ev.reasons + [f"regime={regime_label}"], "shap_top3": [],
                 "latency_ms": {"assemble": bundle.assembly_latency_ms},
                 "order_id": "", "status": "HOLD", "reject_code": None,
             })

@@ -1,0 +1,8 @@
+{
+  "_comment": "Hand-checked company aliases per ticker. Merged with data/processed/aliases_auto.json. Add the masked company/brand names you see in headlines (e.g. DSNY -> DreamScape). Leave a list empty if unsure.",
+  "DSNY": ["DreamScape"],
+  "PLNX": ["Polestar"],
+  "ROUT": ["RouteWave"],
+  "SONA": ["Sonata"],
+  "HMDP": ["Haven Depot"]
+}

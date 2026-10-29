@@ -69,19 +69,33 @@ class RateLimiter:
             wait_s = deficit / (self.rate_per_sec * self._penalty_rate_factor)
             self.stats.waited += 1
             self.stats.waited_total_ms += wait_s * 1000.0
-        # Wait outside the lock so other coroutines can refill
-        await asyncio.sleep(wait_s)
-        # Retry once
-        async with self._lock:
-            now = time.perf_counter()
-            self._refill(now)
-            if self._tokens >= 1.0:
-                self._tokens -= 1.0
-                self.stats.acquired += 1
-                self.stats.by_priority[priority] = self.stats.by_priority.get(priority, 0) + 1
-                return True
-            self.stats.refused += 1
-            return False
+        # Wait outside the lock so other coroutines can refill.
+        # asyncio.sleep() on Windows can return slightly early (typically by
+        # up to one clock-tick, ~15 ms) which leaves tokens < 1.0 and would
+        # cause acquire() to return False even though the caller did its
+        # part. Loop in small slices until tokens are available, bounded by
+        # wait_s + 50 ms slack for scheduler jitter.
+        import contextlib
+        deadline = time.perf_counter() + wait_s + 0.050
+        while True:
+            await asyncio.sleep(min(0.020, max(0.0, deadline - time.perf_counter())))
+            async with self._lock:
+                now = time.perf_counter()
+                self._refill(now)
+                # Re-check penalty box (could have been triggered mid-wait)
+                if now < self._penalty_until:
+                    self.stats.refused += 1
+                    return False
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    self.stats.acquired += 1
+                    self.stats.by_priority[priority] = (
+                        self.stats.by_priority.get(priority, 0) + 1
+                    )
+                    return True
+                if time.perf_counter() >= deadline:
+                    self.stats.refused += 1
+                    return False
 
     def _refill(self, now: float) -> None:
         elapsed = now - self._last
