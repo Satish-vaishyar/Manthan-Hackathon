@@ -1,0 +1,8 @@
+{
+  "latest_run": "20261029T075240Z_f09695",
+  "raw_dir": "C:\\rev\\data\\kafka\\20261029T075240Z_f09695",
+  "derived_dir": "C:\\rev\\data\\kafka\\20261029T075240Z_f09695\\derived",
+  "prices_csv": "C:\\rev\\data\\kafka\\20261029T075240Z_f09695\\derived\\prices_kafka.csv",
+  "news_csv": "C:\\rev\\data\\kafka\\20261029T075240Z_f09695\\derived\\news.csv",
+  "updated_at": "2026-10-29T07:59:29.496061+00:00"
+}

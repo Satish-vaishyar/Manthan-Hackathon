@@ -1,0 +1,60 @@
+# model1 — Cross-Sectional Temporal Transformer (CSTT)
+# All paths are relative to the model1/ folder.
+
+data:
+  raw_prices: data/raw/prices.csv
+  processed: data/processed/dataset.npz
+  window: 64              # days of history fed per ticker
+  min_history: 20         # samples need at least this many valid days in the window
+  label_clip: 0.15        # winsorise next-day log returns at +/-15% before building targets
+  horizons: [1, 5]        # forward horizons (trading days) for return targets
+  # Date splits (simulated dates). An embargo of `embargo_days` is dropped before val and test.
+  train_end: "2024-06-28"
+  val_end: "2025-03-31"
+  test_end: "2026-07-27"
+  embargo_days: 5
+
+model:
+  n_features: 28          # must match features.FEATURE_NAMES
+  d_model: 64
+  temporal_layers: 2
+  cross_layers: 2
+  n_heads: 4
+  ff_mult: 2
+  dropout: 0.2
+  use_news: false         # phase 2: set true once news_features.csv exists (see ARCHITECTURE.md §6)
+  news_dim: 8
+
+train:
+  seed: 42
+  n_seeds: 5              # ensemble size for the final model
+  epochs: 80
+  batch_days: 32          # one sample = one trading day (all tickers of that day)
+  lr: 3.0e-4
+  weight_decay: 1.0e-2
+  warmup_epochs: 3
+  grad_clip: 1.0
+  patience: 12            # early stopping on validation mean daily IC (horizon 1)
+  amp: true               # mixed precision on CUDA (bf16 if supported, else fp16)
+  num_workers: 2
+  # augmentation
+  ticker_subsample: [6, 40]   # random universe size per training day (live universe may be ~10)
+  feature_noise: 0.02
+  feature_dropout: 0.05
+  history_dropout: 0.3        # prob. of randomly truncating the window to [min_history, window]
+  # loss weights
+  loss:
+    ic_h1: 1.0
+    ic_h5: 0.5
+    huber: 0.5
+    direction: 0.3
+    vol: 0.2
+    regime: 0.1
+
+eval:
+  top_k: 5
+  fee_per_order: 20.0
+  capital: 1000000.0
+
+export:
+  out_dir: artifacts

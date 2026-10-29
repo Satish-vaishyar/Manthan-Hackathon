@@ -1,0 +1,24 @@
+ticker,raw_last_date,missing_days_estimate,action_for_bot,ask_venue
+AQUA,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+BAMR,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+BOEN,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+CHVR,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+CNPH,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+CSTC,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+CTPR,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+ELYX,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+EXNR,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+GAER,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+GLDM,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+JMPC,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+JNJX,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+MCDS,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+MGNS,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+MRKX,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+NKEX,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+PEPX,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+PHRX,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+PRGD,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+SLBX,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+UNPR,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True
+WLFG,2025-08-29,~232 trading days (vs AETX-style tickers reaching 2026-07-27),do NOT trade; value any existing holding at last known close,True

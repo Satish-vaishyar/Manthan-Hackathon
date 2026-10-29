@@ -1,0 +1,52 @@
+{
+  "base_url": "http://192.168.65.157:3002/api/v1",
+  "dataset_id": "masked_tech_10yr",
+  "dataset_name": "Masked Multi-Sector Benchmark (40 Stocks, 2016-2025)",
+  "raw_downloaded_rows": 49706,
+  "cleaned_rows": 49654,
+  "training_cutoff": "2026-07-27",
+  "tickers_total": 40,
+  "tickers_expected_active": 17,
+  "tickers_expected_stopped": 23,
+  "price_decimals": 2,
+  "columns": [
+    "date",
+    "ticker",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "ticker_active_in_live",
+    "is_anomaly_crash"
+  ],
+  "suspect_crashes": [
+    {
+      "ticker": "FLXN",
+      "date": "2022-04-20",
+      "pct_move": -35.12,
+      "ratio": 1.54,
+      "volume_x_normal": 31.5
+    },
+    {
+      "ticker": "SYNM",
+      "date": "2022-02-03",
+      "pct_move": -26.39,
+      "ratio": 1.36,
+      "volume_x_normal": 8.7
+    },
+    {
+      "ticker": "CYNT",
+      "date": "2024-08-02",
+      "pct_move": -26.06,
+      "ratio": 1.35,
+      "volume_x_normal": 5.6
+    }
+  ],
+  "sandbox_settings_observed": {
+    "interval_seconds": 5,
+    "total_days": 500,
+    "days_completed_observed": 438,
+    "note": "DIFFERS from problem statement (3-4s per day). Live run may differ again."
+  }
+}

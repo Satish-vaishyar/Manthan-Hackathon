@@ -1,0 +1,8 @@
+All calendar logic must use the simulated date column, not wall-clock dates.
+Simulated dates run 2021-02-04 -> 2026-07-27 (after cutoff).
+Settlement Friday pattern: short positions are squared off every 10 trading days
+  (alternate Fridays). Trading-day indices, not date arithmetic, are the right
+  way to schedule settlements.
+FY boundary: dataset name says 2016-2025 but the timeline actually runs 2021-
+  2026. Use the simulated dates verbatim for any tax-horizon logic (STCG/LTCG).
+Common training cutoff: 2026-07-27 (oldest of the active tickers' last dates).

@@ -1,0 +1,48 @@
+{
+  "run_dir": "C:\\rev\\data\\kafka\\20261029T075240Z_f09695",
+  "raw_messages": {
+    "ticks": 370,
+    "news": 689
+  },
+  "cleaned": {
+    "price_rows": 370,
+    "price_tickers": 10,
+    "price_date_range": [
+      "2024-10-25",
+      "2025-07-11"
+    ],
+    "news_rows": 689,
+    "news_tickers": 10,
+    "news_date_range": [
+      "2024-10-25",
+      "2025-07-11"
+    ]
+  },
+  "rest_universe_size": 40,
+  "kafka_universe_size": 10,
+  "overlap": [
+    "AERX",
+    "BLUX",
+    "DSNY",
+    "HAVN",
+    "HMDP",
+    "MOTR",
+    "ORCX",
+    "PLNX",
+    "ROUT",
+    "SONA"
+  ],
+  "kafka_only_tickers": [
+    "AERX",
+    "BLUX",
+    "DSNY",
+    "HAVN",
+    "HMDP",
+    "MOTR",
+    "ORCX",
+    "PLNX",
+    "ROUT",
+    "SONA"
+  ],
+  "captured_at": "2026-10-29T07:58:10.412032+00:00"
+}
