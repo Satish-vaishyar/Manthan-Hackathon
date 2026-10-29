@@ -204,11 +204,19 @@ class DisagreementGateSettings:
 
 @dataclass
 class PartialTakeProfitSettings:
-    """Book `fraction` of a long once at +`pct` from FIFO entry; the rest
-    rides the native exit. Fires once per position lifetime."""
+    """Rung-ladder partial take-profit: at each `pct` gain level (from FIFO
+    entry), sell `frac` of the CURRENT holding. Whatever remains after the
+    last rung rides the native score-decay exit. One rung per day per
+    ticker; each rung fires once per position lifetime.
+
+    `rungs` example: [{pct: 0.08, frac: 0.25}, {pct: 0.14, frac: 0.25},
+    {pct: 0.25, frac: 0.25}] -> 25% off at +8%, 25% of the rest at +14%,
+    25% of the rest at +25%, final ~42% rides. Legacy single-shot config
+    (fraction+pct, no rungs) is treated as one rung."""
     enabled: bool = False
     fraction: float = 0.25
     pct: float = 0.08
+    rungs: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -523,6 +531,9 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
                 enabled=bool(ptp_block.get("enabled", False)),
                 fraction=float(ptp_block.get("fraction", 0.25) or 0.25),
                 pct=float(ptp_block.get("pct", 0.08) or 0.08),
+                rungs=[{"pct": float(r.get("pct", 0.08)),
+                        "frac": float(r.get("frac", 0.25))}
+                       for r in (ptp_block.get("rungs") or [])],
             )
         ts_block = strat.pop("trailing_sl", None)
         if ts_block is not None:

@@ -96,14 +96,19 @@ strategy:
   # trailing stop books max possible profit: winners run past +10% while
   # the stop ratchets up behind them).
   take_profit_pct: 0.0
-  # P3-25: partial take-profit — book 25% of a winner once at +8%, let the
-  # other 75% ride the native score-decay exit. Exit tournament: full TP
-  # cost -2.3L; 25%@8% costs only -30K — the cheapest profit-booking that
-  # keeps the winners' tail.
+  # P3-25: rung-ladder partial take-profit (user spec 2026-10-30):
+  #   +8%  -> sell 25% of the position
+  #   +14% -> sell 25% of what remains
+  #   +25% -> sell 25% of what remains
+  #   rest (~42% of the original) rides the native score-decay exit.
+  # Tournament: single 25%@8% rung cost only -30K vs holding; each extra
+  # rung books more visible profit at the price of some winner-tail.
   partial_take_profit:
     enabled: true
-    fraction: 0.25
-    pct: 0.08
+    rungs:
+      - { pct: 0.08, frac: 0.25 }
+      - { pct: 0.14, frac: 0.25 }
+      - { pct: 0.25, frac: 0.25 }
   # P3-24: stepped trailing SL — DISABLED 2026-10-30 after the exit-strategy
   # tournament (scripts/tune_exits.py, 744 round trips): EVERY mechanical
   # exit overlay lost money vs the native score-decay exit; stepped was the

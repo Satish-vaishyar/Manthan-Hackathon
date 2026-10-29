@@ -244,9 +244,9 @@ class TradingBot:
         # P3-24: peak close per long ticker since entry (trailing SL). Seeded
         # lazily at first sight each day; entries dropped when flat.
         self._trail_peak: dict[str, float] = {}
-        # P3-25: tickers whose partial take-profit already fired for the
-        # current position (reset when flat).
-        self._ptp_done: set[str] = set()
+        # P3-25: per-ticker partial-TP rung stage (next rung index to fire;
+        # reset when the position goes flat).
+        self._ptp_stage: dict[str, int] = {}
 
     @staticmethod
     def _load_optimized_weights(settings) -> Optional[dict[str, float]]:
@@ -1262,27 +1262,34 @@ class TradingBot:
                     server_h[t] = int(server_h.get(t, 0)) - qty
                 tp_exits.add(t)
 
-        # P3-25: partial take-profit — book `fraction` of a long ONCE when
-        # it first reaches +pct from FIFO entry; the rest rides the native
-        # score-decay exit (tournament: full TP cost -2.3L, 25%@8% only
-        # -30K). Cheap visible profit-booking that keeps the winners' tail.
+        # P3-25: rung-ladder partial take-profit — at each configured gain
+        # level (from FIFO entry), sell `frac` of the CURRENT holding; the
+        # remainder after the last rung rides the native score-decay exit.
+        # One rung per day per ticker; rungs fire once per position
+        # lifetime (stage resets when flat).
         ptp_cfg = getattr(self.settings.strategy, "partial_take_profit", None)
         if ptp_cfg is not None and bool(getattr(ptp_cfg, "enabled", False)) \
                 and not self.settings.dry_run:
-            ptp_frac = float(getattr(ptp_cfg, "fraction", 0.25) or 0.25)
-            ptp_pct = float(getattr(ptp_cfg, "pct", 0.08) or 0.08)
-            for t in list(self._ptp_done):
+            rungs = getattr(ptp_cfg, "rungs", None) or [
+                {"pct": float(getattr(ptp_cfg, "pct", 0.08) or 0.08),
+                 "frac": float(getattr(ptp_cfg, "fraction", 0.25) or 0.25)}]
+            for t in list(self._ptp_stage):
                 if not self.ledger.lots.get(t):
-                    self._ptp_done.discard(t)  # flat — reset for next position
+                    del self._ptp_stage[t]  # flat — reset for next position
             for t, lots in list(self.ledger.lots.items()):
-                if not lots or t not in bundle.ticks or t in self._ptp_done:
+                if not lots or t not in bundle.ticks:
                     continue
+                stage = int(self._ptp_stage.get(t, 0))
+                if stage >= len(rungs):
+                    continue
+                rung = rungs[stage]
                 entry = float(lots[0].price)
                 px = float(bundle.ticks[t].close)
-                if entry <= 0 or (px - entry) / entry < ptp_pct:
+                if entry <= 0 or (px - entry) / entry < float(rung["pct"]):
                     continue
+                frac = float(rung["frac"])
                 held = sum(int(l.qty) for l in lots)
-                qty = int(held * ptp_frac)
+                qty = int(held * frac)
                 server_h = getattr(self, "_server_holdings", None)
                 if server_h is not None:
                     qty = min(qty, max(0, int(server_h.get(t, 0))))
@@ -1292,20 +1299,21 @@ class TradingBot:
                 if remaining_ptp <= 1:
                     break
                 _log.info("partial_take_profit", ticker=t, qty=qty,
-                          frac=ptp_frac, entry=round(entry, 2), px=round(px, 2),
+                          rung=stage + 1, n_rungs=len(rungs),
+                          frac=frac, entry=round(entry, 2), px=round(px, 2),
                           gain_pct=round((px - entry) / entry * 100, 1),
                           component="main")
                 await self.order_manager.submit(
                     OrderRequest(ticker=t, action="SELL", quantity=qty,
                                  date=bundle.simulated_date,
-                                 reason=f"partial_tp {ptp_frac:.0%}@{px/entry-1:.1%}"),
+                                 reason=f"partial_tp rung{stage+1} {frac:.0%}@{px/entry-1:.1%}"),
                     scores={"ensemble": 0.0},
                     reasons=["partial_take_profit", f"regime={regime_label}"],
                 )
                 await self.lifecycle.gate.record_order()
                 if server_h is not None:
                     server_h[t] = int(server_h.get(t, 0)) - qty
-                self._ptp_done.add(t)
+                self._ptp_stage[t] = stage + 1
 
         # P3-24: stepped trailing stop-loss (ratchets up, never lowers):
         #   peak gain < +3%  -> stop at entry - 10%

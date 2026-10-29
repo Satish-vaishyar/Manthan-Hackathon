@@ -165,8 +165,24 @@ def test_partial_take_profit_block_parsed() -> None:
     s = load_settings("configs/default.yaml")
     ptp = s.strategy.partial_take_profit
     assert ptp is not None and ptp.enabled is True
-    assert ptp.fraction == pytest.approx(0.25)
-    assert ptp.pct == pytest.approx(0.08)
+    # User-spec ladder: 25% at +8%, 25% at +14%, 25% at +25%, rest rides.
+    assert [(r["pct"], r["frac"]) for r in ptp.rungs] == [
+        (pytest.approx(0.08), pytest.approx(0.25)),
+        (pytest.approx(0.14), pytest.approx(0.25)),
+        (pytest.approx(0.25), pytest.approx(0.25)),
+    ]
+
+
+def test_partial_take_profit_rung_math() -> None:
+    """Each rung sells 25% of CURRENT holding; ~42% rides after 3 rungs."""
+    held = 1000
+    sold_total = 0
+    for _ in range(3):
+        qty = int(held * 0.25)
+        sold_total += qty
+        held -= qty
+    assert sold_total == 250 + 187 + 140
+    assert held == 423  # ~42% of the original keeps running
 
 
 def test_trailing_sl_block_parsed() -> None:
