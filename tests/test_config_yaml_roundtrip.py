@@ -25,7 +25,9 @@ def test_strategy_weights_from_yaml(monkeypatch) -> None:
     assert s.strategy.event_long_threshold == pytest.approx(0.75)
     assert s.strategy.event_short_threshold == pytest.approx(-0.75)
     assert s.strategy.rebalance_threshold == pytest.approx(0.05)
-    assert s.strategy.exclude_tickers == ["BLUX"]
+    # Symbol-agnostic: no static blacklist (chronic losers handled by the
+    # ticker_bandit veto; evaluation universes have different symbols).
+    assert s.strategy.exclude_tickers == []
 
 
 def test_risk_settings_from_yaml(monkeypatch) -> None:
@@ -36,9 +38,10 @@ def test_risk_settings_from_yaml(monkeypatch) -> None:
 
 
 def test_excluded_ticker_dropped_from_target_weights(monkeypatch) -> None:
-    """BLUX is on the blacklist and must not appear in the target weights."""
+    """exclude_tickers (when configured) must not appear in target weights."""
     from bot.portfolio.constructor import TickerScore, build_target_weights
     s = _make_settings(monkeypatch)
+    s.strategy.exclude_tickers = ["BLUX"]  # synthetic exclusion for the test
     scores = [
         TickerScore(ticker="BLUX", score=1.0, vol=0.02),
         TickerScore(ticker="HAVN", score=0.9, vol=0.02),

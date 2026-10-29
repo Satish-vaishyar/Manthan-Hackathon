@@ -32,7 +32,7 @@ strategy:
   optimized_weights_path: configs/optimized_weights.json
   # Static fallback (fine-tuned 2026-10-29 from tradebook post-mortem).
   weights: { rank: 0.55, news: 0.20, mom: 0.25 }
-  top_k: 8  # 2026-10-30: was 6; 10-name universe (9 eligible w/ BLUX blacklist) under-filled the book
+  top_k: 8  # 2026-10-30: was 6; small universes under-fill the book at top_k 6
   max_weight_name: 0.20  # was 0.15: capped real utilization ~40% after vol sizing
   rebalance_threshold: 0.05
   # P3-14: raised from 50k -> 75k so we concentrate capital, charge fewer
@@ -43,13 +43,14 @@ strategy:
   # even if below the 75K entry floor.
   exit_min_notional: 5000
   max_orders_per_day: 8  # was 4: deployment took multiple sim days; churn now controlled by min_hold_days
-  # Higher conviction bar — fewer low-conv BLUX-style churn trades.
+  # Higher conviction bar — fewer low-conviction churn trades.
   event_long_threshold: 0.75  # restored: iter-2/3 proved higher bars starve the book
   event_short_threshold: -0.75
-  # BLUX: 22 trades, 45.5% win-rate, −₹27,071 over 18mo — blacklist.
-  # HMDP: only lifetime-loser ticker AND −₹82K in tuning iter-1.
-  # SONA: −₹37K in iter-1, structurally weak recently.
-  exclude_tickers: [BLUX]  # restored: iter-2/3 exclusions were regime-specific overfitting
+  # No static blacklist: the bot must be symbol-agnostic (evaluation uses
+  # different symbols). Chronic losers are handled ADAPTIVELY by the
+  # ticker_bandit hard-veto below, which learns from realised P&L and
+  # self-heals — no symbol names anywhere in config or code.
+  exclude_tickers: []
   # P3-15: opt-in RL tuner — UCB1 bandit over weight triples. Disabled by
   # default; enable to let the bot adapt weights online based on realised
   # per-day equity delta. See bot/portfolio/rl_tuner.py for the algo.
@@ -82,10 +83,9 @@ strategy:
     floor: 0.5
     cap: 1.15
     min_obs: 2
-    # Hard BUY-veto: >=6 realised trades with edge z <= -0.55 blocks new
-    # BUYs (lifetime bleeders: SONA -2.4L/129 trades, DSNY -1.4L, ORCX -1.1L).
-    # Self-heals: EMA decays 0.90/quiet sim day, so a reformed ticker
-    # re-earns eligibility — unlike the static blacklist (regime overfit).
+    # Hard BUY-veto: >=5 (decayed) realised trades with edge z <= -0.55
+    # blocks new BUYs for chronic losers. Fully symbol-agnostic: learns
+    # from realised P&L at runtime and self-heals via 0.90/quiet-day decay.
     veto_pulls: 5  # decayed count; ~5 recent realised trades
     veto_z: -0.55
     day_decay: 0.90
