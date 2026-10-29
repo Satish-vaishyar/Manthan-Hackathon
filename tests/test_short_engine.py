@@ -220,6 +220,21 @@ class TestAnyAxisTrigger:
         assert "AAA" in out
 
 
+def test_risk_per_name_short_cap_aligns_with_engine() -> None:
+    """risk.max_short_single must cover strategy's max_weight_short, else
+    every engine-sized short dies as RISK_SINGLE_SHORT (2026-10-30 bug)."""
+    from bot.portfolio.risk import RiskManager
+    from bot.portfolio.ledger import Ledger
+    s = load_settings("configs/default.yaml")
+    assert s.risk.max_short_single >= s.strategy.short_engine.max_weight_short
+    rm = RiskManager(s.risk, None)  # no settlement calendar in test
+    ledger = Ledger(cash=1_000_000.0)
+    ledger.equity = 1_000_000.0
+    # a 9% single-name short passes; an 11% one is denied
+    assert rm.check_short(ledger, "AAA", 90, 1000.0, __import__("datetime").date(2026, 1, 5)).allowed
+    assert not rm.check_short(ledger, "AAA", 110, 1000.0, __import__("datetime").date(2026, 1, 5)).allowed
+
+
 def test_short_engine_block_parsed_from_yaml() -> None:
     s = load_settings("configs/default.yaml")
     se = s.strategy.short_engine

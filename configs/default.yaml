@@ -206,6 +206,9 @@ risk:
   # P3-14: 5% -> 2% so we keep >80% of equity invested most of the time.
   cash_buffer: 0.02
   max_short_gross: 0.20
+  # Per-name short cap — was hardcoded 0.05 in risk.check_short and silently
+  # rejected every engine-sized 10% short (RISK_SINGLE_SHORT, 2026-10-30).
+  max_short_single: 0.10
   max_name_weight: 0.20  # unified with strategy.max_weight_name (0.15 silently vetoed 20%-target orders)
   max_sector_weight: 0.30
   # P3-14: target cash utilisation (long_mv / equity). When below target,

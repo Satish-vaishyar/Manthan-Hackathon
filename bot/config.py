@@ -339,6 +339,10 @@ class RiskSettings:
     # small float for rounding errors.
     cash_buffer: float = 0.02
     max_short_gross: float = 0.20
+    # Per-name short cap (was hardcoded 0.05 in risk.check_short — silently
+    # rejected every engine-sized 10% short with RISK_SINGLE_SHORT,
+    # 2026-10-30). Now explicit; aligned with strategy.max_weight_short.
+    max_short_single: float = 0.10
     max_name_weight: float = 0.15
     max_sector_weight: float = 0.30
     gross_long_target: dict[str, float] = field(default_factory=lambda: {"risk_on": 0.92, "neutral": 0.75, "risk_off": 0.40})

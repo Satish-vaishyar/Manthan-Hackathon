@@ -174,10 +174,12 @@ class RiskManager:
         if new_short_notional / equity > self.settings.max_short_gross:
             return RiskVerdict.deny("RISK_SHORT_GROSS",
                 f"gross short {new_short_notional/equity:.2%} > cap {self.settings.max_short_gross:.2%}")
-        # Per-short cap: 5% of equity per single name
-        if (qty * price) / equity > 0.05:
+        # Per-short cap: max_short_single of equity per single name
+        # (was hardcoded 5% — rejected every engine-sized 10% short).
+        cap = float(getattr(self.settings, "max_short_single", 0.05) or 0.05)
+        if (qty * price) / equity > cap:
             return RiskVerdict.deny("RISK_SINGLE_SHORT",
-                f"single short notional {qty*price/equity:.2%} > 5% cap")
+                f"single short notional {qty*price/equity:.2%} > {cap:.0%} cap")
         return RiskVerdict.allow()
 
     def check_cover(self, ledger: Ledger, ticker: str, qty: int) -> RiskVerdict:
