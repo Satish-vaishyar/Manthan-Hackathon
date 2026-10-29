@@ -61,6 +61,12 @@ class OrderValidator:
         sim_date: Optional[_date] = None,
         universe: Optional[set[str]] = None,
     ) -> ValidationResult:
+        """Run all client-side pre-submission checks for one order.
+
+        Pure + network-free. Returns allow() or deny(canonical RejectCode).
+        Dispatch order: field sanity -> duplicate-in-flight -> per-action
+        cash/holdings/margin checks -> RiskManager caps.
+        """
         # 1) Basic field checks
         if not req.ticker or not isinstance(req.ticker, str):
             return ValidationResult.deny(RejectCode.INVALID_TICKER, "ticker missing or wrong type")
@@ -166,6 +172,9 @@ class OrderValidator:
     # In-flight tracking
     # ------------------------------------------------------------------
     def mark_in_flight(self, req: OrderRequest, price: float = 0.0) -> None:
+        """Record an order as in-flight (blocks duplicates) and, for BUYs,
+        reserve qty*price+brokerage from the available-cash pool (P3-16).
+        Must be paired with clear_in_flight() once the outcome is known."""
         key = (req.ticker, req.action, req.quantity)
         self._in_flight.add(key)
         # P3-16: reserve cash for in-flight BUYs so subsequent validations
@@ -176,6 +185,7 @@ class OrderValidator:
             self._reserved_cash += reserved
 
     def clear_in_flight(self, req: OrderRequest) -> None:
+        """Release the in-flight slot + any reserved cash for this order."""
         key = (req.ticker, req.action, req.quantity)
         self._in_flight.discard(key)
         reserved = self._reserved_by_key.pop(key, 0.0)

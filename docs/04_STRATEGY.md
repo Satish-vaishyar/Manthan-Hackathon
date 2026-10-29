@@ -7,7 +7,7 @@ We do **not** maximise raw profit. We maximise the scorecard:
 | Metric | How our strategy addresses it |
 |--------|-------------------------------|
 | Total Wealth | Positive-expectancy signals, compounding, drawdown control |
-| Cash Utilization | Core book keeps 60–90% of equity invested |
+| Cash Utilization | **Updated 2026-10-29:** `risk.target_cash_utilization: 0.85` — the constructor scales target weights toward 85% invested; an idle-cash deployer tops up after every 15 s reconcile when utilisation is >5pp below target |
 | Decision Latency | Decide within ~0.5 s of the candle; always send `date` |
 | Low Order Error Rate | Client-side validation, ledger, rate limiter → target 0 rejections |
 | Tax & Friction Efficiency | Low turnover, minimum trade size, LTCG-aware holding, loss/gain harvesting |
@@ -28,39 +28,70 @@ Each hypothesis must be **validated in the backtester** on recorded sandbox data
 
 ## 3. Portfolio structure: Core + Satellite
 
-### 3.1 Core book (target 55–75% of equity)
-- Long-only, top-K tickers (K = 6–10, scaled with universe size) by ensemble score.
+### 3.1 Core book (target ~85% of equity — Updated 2026-10-29)
+- Long-only, top-K tickers (**K = 6**, tuned down from 8 for concentration) by ensemble score.
 - Inverse-volatility weights, capped at 15% per name and 30% per sector cluster.
-- **Rebalance only when** `|target_w − current_w| > 2.5%` of equity **and** trade notional ≥ ₹50,000.
+- **Rebalance only when** `|target_w − current_w| > 5%` of equity **and** trade notional ≥ ₹75,000
+  (entries; exits use a lower ₹5,000 floor so legacy positions stay sellable).
+- **`exclude_tickers: [BLUX]`** — tradebook post-mortem (runs/_tradebook_analysis.md): 22 trades,
+  45.5% win-rate, −₹27,071. Blacklisting BLUX was the single biggest tuning win.
 - Holding period naturally long → most gains become LTCG eligible if the run is long enough.
 
 ### 3.2 Satellite event book (target 10–25% of equity)
-- **Long event trade**: `news_score ≥ +0.6` and confirmation (close in top 30% of day range or volume
-  z > 1) → BUY at today's close, size 3–6% of equity. Exit after 2–5 days, on trailing stop
-  (2.5×ATR), or when `news_decay < 0.2`.
-- **Short event trade**: `news_score ≤ −0.6`, price below 20-d SMA, regime not strongly risk-on, and
+- **Long event trade**: `news_score ≥ +0.75` (Updated 2026-10-29, raised from 0.6) and confirmation
+  (close in top 30% of day range or volume z > 1) → BUY at today's close, size 3–6% of equity.
+  Exit after 2–5 days, on trailing stop (3.5×ATR, Updated 2026-10-29), or when `news_decay < 0.2`.
+- **Short event trade**: `news_score ≤ −0.75` (Updated 2026-10-29), price below 20-d SMA, regime not strongly risk-on, and
   **≥ 3 trading days before the next settlement** → SHORT 2–5% of equity. COVER after ≤ 3 days,
   on stop (2×ATR), or the day before settlement.
 - Max simultaneous event trades: 4.
 
 ### 3.3 Cash
-- Minimum cash buffer: `max(5% of equity, 15% × short notional)`.
-- Regime sets max gross exposure: risk-on 92%, neutral 75%, risk-off 40% (+ shorts allowed).
+- Minimum cash buffer: **Updated 2026-10-29: 2%** of equity (`risk.cash_buffer: 0.02`, lowered from
+  5%) plus short-notional margin; the constructor scales weights toward
+  `risk.target_cash_utilization: 0.85` (scale clamped to [0.5, 1.5]).
+- Regime (M5) sets max gross exposure: risk-on 92%, neutral 75%, risk-off 40% (+ shorts allowed).
+- **Idle-cash deployer** (`strategy.idle_cash_deploy {enabled, epsilon: 0.05}`): after every 15 s
+  reconcile, if utilisation from the *server's* cash/equity is >5pp below target, place ONE extra
+  BUY in the highest-conviction ticker, sized to the utilisation gap and capped by
+  `max_cash_per_trade × cash × 0.99` − brokerage (all normal guards still apply).
 
 ## 4. Signal ensemble
 
 For each ticker on day D:
 
 ```
-s_rank   = cross-sectional percentile of LightGBM predicted fwd return     ∈ [0,1] → map to [-1,1]
-s_news   = news-impact score (today's + decayed history)                     ∈ [-1,1]
-s_mom    = rules: sign/strength of (20d ret, 50d SMA slope, RSI regime)      ∈ [-1,1]
+s_rank   = M1 CSTT ranker score (5 ONNX members)                               ∈ [-1,1]
+s_news   = M2 FinBERT NRIM news score (3 members, offline) + M6 event tagger   ∈ [-1,1]
+s_mom    = M3 DMN momentum (5 members) + rules                                 ∈ [-1,1]
 score    = w_rank·s_rank + w_news·s_news + w_mom·s_mom
-           (default 0.45 / 0.35 / 0.20 — tuned in backtester, then FROZEN)
-score   *= regime_multiplier            (risk-on 1.0, neutral 0.8, risk-off 0.5 for longs)
+score   *= regime_multiplier            (M5: risk-on 1.0, neutral 0.8, risk-off 0.5 for longs)
 ```
 
-If a model fails, its weight is redistributed to the others; if all models fail, use `s_mom` only.
+If a model fails, its weight is redistributed to the others; if all models fail, use the rules
+fallback only.
+
+**Updated 2026-10-29 — weights are ESTIMATED, not hand-picked**
+(`bot/portfolio/weight_optimizer.py`, pure numpy; built by `scripts/optimize_weights.py` from
+12,396 journal records = 500 sim days × 10 tickers in `runs/*/journal.jsonl`):
+- Per-day cross-sectional **Spearman IC** of each signal vs next-day returns.
+- Four estimators: IR-weighted (Grinold & Kahn), inverse-variance, **Markowitz-on-IC**
+  (w = simplex(Σ⁻¹μ), Ledoit-Wolf-shrunk covariance), and a **1,000× Monte-Carlo day-bootstrap**
+  of the Markowitz estimator.
+- Final = bootstrap mean, shrunk toward equal weights by the empirical P(w≤0) per signal.
+- Measured IC means: rank **.017** / news **.078** / mom **.141** → optimal
+  **{rank 0.258, news 0.322, mom 0.420}** (the old hand-picked rank=0.55 was overweighting the
+  *weakest* signal). Written to `configs/optimized_weights.json` +
+  `runs/_weight_optimization.md`; loaded at boot when `strategy.weights_mode: optimized`.
+  Static YAML weights are fallback only.
+
+**Updated 2026-10-29 — RL tuner** (`bot/portfolio/rl_tuner.py`, config `strategy.rl_tuner`):
+- **UCB1 multi-armed bandit** over 5 weight-triple arms; the statistically-optimized triple is
+  injected as **arm 0**.
+- Before each `ensemble.evaluate()` the tuner overrides `signals.weights`; the realized equity
+  delta per reconcile is fed back as reward.
+- Round-robin warmup until every arm is pulled once, then UCB1 (c=1.4).
+- Observability: `rl_tuner_ready` / `rl_tuner_commit` / `rl_tuner_switch` log events + `stats()`.
 
 ## 5. From score to orders (daily decision loop)
 
@@ -76,7 +107,8 @@ If a model fails, its weight is redistributed to the others; if all models fail,
 6. Cost/tax gate per delta:
      expected_edge(₹) = |score| · k_edge · notional · horizon
      cost(₹)          = 20 (+15.34 if sell) + est_tax_if_realising_gain
-     keep if expected_edge > 2 · cost  and notional ≥ ₹50,000 (exits exempt from min notional)
+     keep if expected_edge > 2 · cost  and notional ≥ ₹75,000 entries / ₹5,000 exits (Updated 2026-10-29);
+     marginal trades (notional < 50× brokerage) are ALWAYS skipped, risk-reducing exits exempt
 7. Tax engine adjustments: delay a SELL if lot hits LTCG within ≤ 30 trading days and the sell
    signal is weak (score > −0.5); add harvest orders near FY end (see doc 06).
 8. Rank remaining orders by priority then |expected_edge − cost|; keep top N (N = budget, default 4).

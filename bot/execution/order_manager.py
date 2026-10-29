@@ -66,6 +66,8 @@ class OrderManager:
         self.stats = OrderManagerStats()
 
     def _notify_divergence(self, reason: str, ticker: str = "") -> None:
+        """Fire-and-forget the divergence callback (scheduled on the running
+        loop; silently dropped if there is none, e.g. in tests)."""
         import asyncio as _aio
         if self._on_state_divergence is None:
             return
@@ -142,6 +144,8 @@ class OrderManager:
                     continue
                 break
             if resp.get("_status", 0) == 429:
+                # 429 penalty box: tell the rate limiter to back off globally,
+                # then retry with a 5s/10s ladder before giving up.
                 await self.rate_limiter.note_429()
                 self.stats.rate_limited += 1
                 if attempt < 2:
@@ -164,6 +168,7 @@ class OrderManager:
                 date=req.date, timestamp=datetime.utcnow(),
             )
 
+        # api_client wraps raw replies as {"_status": int, "_body": dict}.
         status = resp.get("_status", 0)
         payload = resp.get("_body", {})
 
@@ -249,6 +254,8 @@ class OrderManager:
     # Apply fill -> ledger
     # ------------------------------------------------------------------
     def _apply_fill(self, resp: OrderResponse) -> None:
+        """Mutate the local ledger for a confirmed FILLED order, applying
+        brokerage on every order + DP charge on sells."""
         b = self.settings.tax.brokerage_per_order
         d = self.settings.tax.dp_charge_per_sell
         if resp.action == "BUY":

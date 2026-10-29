@@ -4,11 +4,18 @@ All schemas below are copied from the PS. Fields marked **(verify)** are not doc
 confirmed against the portal's API tab (`http://<SERVER_IP>:3003` → APIs) on day one. Implement them
 as pydantic models in `bot/contracts.py` with `extra="ignore"` so unknown fields don't crash us.
 
+> **Updated 2026-10-29 — server-contract reality (verified live):** the server returns **different
+> key names than the PS samples below**. `bot/contracts.py` handles every one via pydantic
+> `AliasChoices`; the §2.5 table lists the actual keys. Other live facts: `/api/v1/orders`
+> paginates at 50 (use `?limit=10000`), there is **no `/api/v1/news` endpoint** (404), history is
+> via `/api/v1/stocks/{t}/history?days=N`, the heartbeat accepts wrapped `{_status, _body}`
+> responses, and the server can report **negative holdings** (a short inside `holdings`).
+
 ## 1. Kafka
 
 | Setting | Value |
 |---------|-------|
-| Bootstrap | `<SERVER_IP>:9094` |
+| Bootstrap | `<SERVER_IP>:9094` — **Updated 2026-10-29 (live):** `192.168.65.157:9094`, group `group-mn2632` |
 | Security | `PLAINTEXT` |
 | Group id | `group-<team_username>` (exact prefix — the readiness tracker relies on it) |
 | Topics | `market.ticks`, `market.news` (10 partitions each) |
@@ -65,6 +72,10 @@ as pydantic models in `bot/contracts.py` with `extra="ignore"` so unknown fields
 ```
 
 → respond with `POST /bot/heartbeat {"seq": 14}`. Requirement: ≥ 1 ACK per 15 s.
+**Updated 2026-10-29:** the preflight router must check `event_type` first (heartbeats were being
+misrouted), and the server may return a wrapped `{_status, _body}` heartbeat response — both
+handled. Portal shows "Waiting for ACK" whenever preflight isn't actively broadcasting; the
+platform stage also bounces development↔simulation and trades only fill in simulation windows.
 
 ### 1.4 Dispatch rule
 
@@ -101,7 +112,15 @@ Base: `http://<SERVER_IP>:3002/api/v1`. Auth header: `Authorization: Bearer <BOT
 ```
 
 - `action ∈ {BUY, SELL, SHORT, COVER}`; `quantity` int in [1, 1_000_000]; `date` = current simulated date.
-- Response body: **(verify)** order id, status, fill price, fees, tax. Store the raw response in the journal.
+- Response body: **Updated 2026-10-29 (verified)** — keys are `order_id`, `execution_price`,
+  `simulated_date`, `executed_at`, `dp_charges` (not the PS names). `status` literals now include
+  **`UNKNOWN`**: an empty/unparseable success body is *never* applied as a phantom fill — the bot
+  marks the order UNKNOWN and triggers an immediate portfolio resync via `on_state_divergence`.
+  Store the raw response in the journal.
+- **Updated 2026-10-29:** the order POST is retried up to 3× (network errors: 1s/2s backoff;
+  HTTP 429: penalty-box + 5s/10s). All give-up paths return `UNKNOWN` + resync, never a blind
+  REJECTED. Server-side caches are updated optimistically on every FILLED order
+  (`_apply_fill_to_server_cache`).
 
 ### 2.2 GET /stage
 
@@ -142,14 +161,31 @@ Trading gate OPEN iff `stage == "simulation" and status == "RUNNING"`
 
 `days` is calendar days (default 365). Anti-lookahead: only dates < current simulation date.
 
+### 2.5 Actual server response keys (Updated 2026-10-29, AliasChoices in `bot/contracts.py`)
+
+| Model | Server key(s) → canonical field |
+|-------|----------------------------------|
+| `OrderResponse` | `order_id`, `execution_price`, `simulated_date`, `executed_at`, `dp_charges`; `status` may be `UNKNOWN` on empty/unparseable success bodies |
+| `PortfolioResponse` | `holdings` → `positions`; `available_cash` / `cash_balance` → `cash`; `total_wealth` → `equity` |
+| `Position` | `avg_buy_price` / `average_buy_price` → `avg_price` |
+| Heartbeat | accepts wrapped `{_status, _body}` responses |
+
+Additional live quirks:
+- `GET /api/v1/orders` **paginates at 50** — pass `?limit=10000` for a full orderbook pull
+  (used for `runs/orderbook_full_*.json`).
+- **No `/api/v1/news`** (404) — news arrives only on Kafka `market.news`; in REST-simulation
+  mode (`run_bot.py` option 2) M2 is therefore neutral.
+- Portfolio `holdings` may contain **negative quantities** (a short held inside `holdings`);
+  every SELL/COVER is clamped to these server-verified holdings cached at each 15 s reconcile.
+
 ## 3. Rejection codes → handler
 
 | Code | Root cause | Our prevention | Our reaction if it still happens |
 |------|-----------|----------------|-----------------------------------|
 | `ACCOUNT_NOT_VERIFIED` | Not verified at desk | Verify in first 30 min | Alert humans; stop orders |
 | `SIMULATION_NOT_RUNNING` | Not in RUNNING | Trading gate | Close gate, force stage poll |
-| `INSUFFICIENT_CAPITAL` | cost + ₹20 > cash | Ledger check incl. fees & buffer | Reconcile cash; shrink size next time |
-| `INSUFFICIENT_MARGIN` | short notional + ₹20 > cash | Ledger check | Reconcile; skip short |
+| `INSUFFICIENT_CAPITAL` | cost + ₹20 > cash | **Updated 2026-10-29:** in-flight BUY cash reservation (`qty·price + brokerage`) + BUY clamped to server cash × 0.90 (`risk.max_cash_per_trade`) × 0.98 price-drift buffer − brokerage | Reconcile cash; shrink size next time |
+| `INSUFFICIENT_MARGIN` | short notional + ₹20 > cash / over-selling a holding | **Updated 2026-10-29:** every SELL/COVER clamped to server-verified holdings (negative holdings = shorts), skipped when nothing sellable. Root cause of the observed `Selling 1142 shares exceeds current holding (-1166)` was phantom fills from empty order responses — fixed (see §2.1) | Reconcile; skip |
 | `ACCOUNT_BLOCKED` | Negative cash | Cash buffer, settlement planning | SAFE_MODE: sell longs to restore cash |
 | `NO_SHORT_POSITION` | COVER w/o short | Ledger check | Reconcile portfolio |
 | `INVALID_TICKER` | Not in universe | Use `/stocks` only | Remove ticker, refresh universe |
@@ -162,9 +198,10 @@ Trading gate OPEN iff `stage == "simulation" and status == "RUNNING"`
 Per minute:        120 hard limit  →  we plan 100 (safety)
 Days per minute:   15 (4 s/day)   –  20 (3 s/day)
 Budget per day:    ~5–6 requests
-  Orders:          ≤ 4 per day (priority 1)
-  Reconciliation:  GET /portfolio once every ~5 days (priority 2)
-  Stage/clock:     public; poll every 30 s during simulation (verify whether it counts)
+  Orders:          ≤ 4 per day (priority 1, largest-notional first)
+  Reconciliation:  Updated 2026-10-29: GET /portfolio every 15 s (timing.reconcile_interval_s)
+  Stage/clock:     public; Updated 2026-10-29: poll every 10 s in simulation
+                   (timing.stage_poll_simulation_s)
   History:         only at startup / pre-flight (spread out, ≤ 1 per second)
-Pre-flight:        heartbeat ≤ 1 per preflight_tick, dedupe identical seq
+Pre-flight:        heartbeat ≤ 1 per preflight_tick, dedupe identical seq; ACK within 15 s always
 ```

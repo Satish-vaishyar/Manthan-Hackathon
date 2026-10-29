@@ -124,18 +124,25 @@ and the replayed historical period is **confidential**.
 | I2 | News arrives after the candle but is executable at the same close → news-driven next-day drift is our main edge. | Wait for the news window before deciding. |
 | I3 | 1 hour ÷ 3–4 s ≈ **900–1200 trading days ≈ 3.5–4.5 years** (if the run lasts the full hour). | LTCG, FY boundaries and harvesting become relevant. Read `total_days` from `/stage` to confirm. |
 | I4 | 120 req/min ÷ 15–20 days/min ≈ **6–8 requests per day** in total. | Local ledger, rare reconciliation, ≤4 orders/day. |
-| I5 | ₹55 round-trip cost → small trades are value-destroying. | Minimum trade notional ≈ ₹50,000. |
+| I5 | ₹55 round-trip cost → small trades are value-destroying. | Minimum trade notional ≈ ₹50,000. **Updated 2026-10-29:** raised to ₹75,000 for entries (₹5,000 exit floor so legacy positions stay sellable). |
 | I6 | Venue network is private → probably **no internet**. | Pre-download all models, wheels, data. |
 | I7 | Live dataset period may differ from sandbox period. | Avoid overfitting; walk-forward validation; regime gating. |
 | I8 | Matching masked prices to real NSE tickers would be look-ahead. | **Forbidden** by our team policy. |
 
 ## 14. Open questions to confirm at the venue / in the video
 
-- [ ] Exact `total_days` and `interval_seconds` of the live run.
-- [ ] Do public endpoints (`/stage`, `/simulation/clock`) count towards the 120/min limit?
+**Updated 2026-10-29 — answered from live operation** (details in docs 03, 06, WORK_LOG):
+
+- [x] Order response contents: server returns `order_id`, `execution_price`, `simulated_date`,
+  `executed_at`, `dp_charges` (different key names than spec'd — handled by AliasChoices in
+  `bot/contracts.py`). **Empty/unparseable success bodies happen** → treated as status `UNKNOWN`,
+  never as a fill; triggers immediate portfolio resync.
+- [x] Universe size: **10 tickers**; history backfill of ~1,920 candles at boot works.
+- [x] `/api/v1/orders` paginates at 50 — use `?limit=10000` for a full orderbook pull.
+- [x] **There is no `/api/v1/news` endpoint** — news exists only on Kafka `market.news`.
+- [x] Server can report **negative holdings** (a short inside `holdings`); bot clamps every
+  SELL/COVER to server-verified holdings.
 - [ ] Lot-matching rule for tax (FIFO vs average cost)?
 - [ ] Which calendar day is the FY boundary in the simulation (31 March of simulated date)?
 - [ ] Is the settlement schedule anchored to simulation day 1 or to calendar Fridays?
-- [ ] Number of tickers and typical number of news items per day.
-- [ ] Does the order response return fill price, fees and tax? (Needed for the ledger.)
 - [ ] Max lookback of `/history` (does `start_date` allow > 365 days?).

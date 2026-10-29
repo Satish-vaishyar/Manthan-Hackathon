@@ -99,6 +99,13 @@ class TradingBot:
     """Top-level orchestrator. Owns every component's lifecycle."""
 
     def __init__(self, settings: Settings) -> None:
+        """Construct every component in dependency order (no I/O here).
+
+        Wiring order mirrors the pipeline: lifecycle/gate -> ledger/journal ->
+        risk -> API/rate-limiter/validator -> signals (M1a/M4/M5/rules +
+        ensemble) -> optional ML models -> RL tuner -> Kafka/assembler ->
+        heartbeat/stage-watcher -> order manager. Network starts in start().
+        """
         self.settings = settings
         self.lifecycle = Lifecycle(settings)
         self.ledger = Ledger(
@@ -289,6 +296,11 @@ class TradingBot:
             return None
 
     def _try_build_model2_fn(self):
+        """Build the M2 news scorer closure (FinBERT-based NRIM).
+
+        Falls back per-call to the keyword scorer if model2 errors mid-run,
+        and returns None (rules path) if the artifact never loads.
+        """
         try:
             from .models.model2_bridge import Model2NewsScorer, KeywordNewsScorer
             scorer = Model2NewsScorer()
@@ -393,6 +405,9 @@ class TradingBot:
     # Lifecycle
     # ------------------------------------------------------------------
     async def start(self) -> None:
+        """Boot sequence: API session -> DISCOVER -> universe -> ring-buffer
+        backfill -> first reconcile (cash truth) -> Kafka + assembler +
+        heartbeat + stage-watcher -> background loops."""
         _log.info("bot_starting",
                   env=self.settings.env,
                   team=self.settings.team_username,
@@ -420,6 +435,8 @@ class TradingBot:
         ]
 
     async def stop(self) -> None:
+        """Graceful shutdown: stop ingest first, cancel loops, close journal,
+        then transition to SHUTDOWN."""
         _log.info("bot_stopping", component="main")
         self._stop.set()
         await self.assembler.stop()
@@ -434,6 +451,7 @@ class TradingBot:
         await self.lifecycle.transition(BotState.SHUTDOWN, reason="bot.stop")
 
     async def wait_until_stopped(self) -> None:
+        """Block until _stop is set (used by the CLI runner)."""
         await self._stop.wait()
 
     # ------------------------------------------------------------------
@@ -472,6 +490,7 @@ class TradingBot:
         _log.error("universe_discovery_exhausted", retries=retries, component="main")
 
     def _expected_tickers(self) -> set[str]:
+        """Provider hook for DayAssembler's complete-by-count check."""
         return self._universe
 
     # ------------------------------------------------------------------
@@ -565,6 +584,15 @@ class TradingBot:
     # Reconciliation
     # ------------------------------------------------------------------
     async def _reconcile(self) -> None:
+        """Re-sync local state from GET /api/v1/portfolio (server is truth).
+
+        Side effects: overwrites ledger cash/lots/shorts, refreshes the
+        _server_holdings/_server_shorts/_server_cash clamp caches (P3-20/21),
+        seeds the DD breaker peak (P3-14), feeds equity deltas to the RL
+        tuner (P3-15), triggers idle-cash deploy (P3-17), and updates the
+        consecutive-loss-day streak (P3-13). Never raises — failures are
+        logged so a transient blip doesn't kill the health loop.
+        """
         try:
             raw = await self.api.get("/api/v1/portfolio")
             # Portal returns `holdings` (longs list). Coerce into the
@@ -828,6 +856,12 @@ class TradingBot:
     # Preflight router — drain preflight_ticks out of the queue
     # ------------------------------------------------------------------
     async def _preflight_router(self) -> None:
+        """Skim preflight ticks/news off the shared queue and ACK them via
+        the heartbeat; anything else is put back for the DayAssembler.
+
+        Necessary because preflight events ride the same Kafka topics as
+        market data, and ACK latency matters during the readiness stage.
+        """
         while not self._stop.is_set():
             try:
                 event = await asyncio.wait_for(self.queue.get(), timeout=1.0)
@@ -851,6 +885,9 @@ class TradingBot:
     # Health loop — DD breaker, cash buffer check
     # ------------------------------------------------------------------
     async def _health_loop(self) -> None:
+        """Every reconcile_interval_s: run the drawdown breaker against
+        server-reconciled equity (SAFE_MODE on hard breach) and re-reconcile
+        while TRADING."""
         while not self._stop.is_set():
             try:
                 # P3-18: use the server-reconciled equity for the DD breaker.
@@ -885,6 +922,8 @@ class TradingBot:
     # Settlement guard loop
     # ------------------------------------------------------------------
     async def _settle_loop(self) -> None:
+        """Every 10s: if we're within force_close_before_days of a settlement,
+        COVER every open short and close the gate for the day."""
         while not self._stop.is_set():
             try:
                 today = self.lifecycle.gate.sim_date
@@ -912,6 +951,14 @@ class TradingBot:
     # Daily pipeline — invoked by DayAssembler
     # ------------------------------------------------------------------
     async def _on_day(self, bundle: DayBundle) -> None:
+        """The daily pipeline, invoked once per assembled DayBundle.
+
+        Steps: (1) open the trading gate (+ cool-down check), (2) push ticks
+        into the ring buffer + vol state, (3) M5 regime + ensemble scores
+        (RL-tuner weights if enabled), (4) target weights + trade deltas,
+        (5) server-truth clamps (P3-20/21) then submit each order,
+        (6) journal HOLD records for untouched tickers.
+        """
         # 1) Mark trading day on calendar + gate
         self.calendar.observe_trading_day(bundle.simulated_date)
         max_orders = self.settings.strategy.max_orders_per_day
@@ -1111,6 +1158,8 @@ class TradingBot:
 # CLI
 # ---------------------------------------------------------------------------
 async def run(args: argparse.Namespace) -> int:
+    """Load settings, boot the bot, install SIGINT/SIGTERM handlers, and
+    block until a signal or the bot stops itself."""
     settings = load_settings(env=args.env, dry_run=args.dry_run)
     fail_fast(settings)
     bot = TradingBot(settings)
@@ -1140,6 +1189,7 @@ async def run(args: argparse.Namespace) -> int:
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
+    """CLI: --env development|sandbox|live (default $BOT_ENV), --dry-run."""
     ap = argparse.ArgumentParser(prog="bot.main")
     ap.add_argument("--env", choices=["development", "sandbox", "live"],
                     default=os.environ.get("BOT_ENV", "sandbox"))
@@ -1149,6 +1199,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def main() -> int:
+    """Synchronous entry point — wraps the async runner in asyncio.run."""
     args = parse_args(sys.argv[1:])
     return asyncio.run(run(args))
 

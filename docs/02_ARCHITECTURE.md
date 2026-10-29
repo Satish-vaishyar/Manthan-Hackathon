@@ -49,11 +49,12 @@
 | **Stage Watcher** | Poll `/stage` (pre-flight: every 2.5 s; simulation: every ~30 s or on anomaly) | `TradingGate` (OPEN/CLOSED), `total_days`, `days_completed` |
 | **Day Assembler** | Group events by `simulated_date`; detect day completion; detect sandbox loop (date goes backwards) | `DayBundle(date, candles{}, news[])` |
 | **Feature Engine** | Incremental indicators per ticker in numpy ring buffers; cross-sectional features | `FeatureFrame (tickers × features)` |
-| **Signal Layer** | News scorer, LightGBM ranker, regime model, vol model, rules; ensemble | `score[ticker]`, `regime`, `vol[ticker]` |
-| **Portfolio Constructor** | Scores → target weights → share deltas; turnover & cost gate | `ProposedOrders` |
+| **Signal Layer** | **Updated 2026-10-29 — all 6 trained models live:** M1 CSTT ranker (5 ONNX members, `bot/models/model1_onnx.py`), M2 FinBERT NRIM news scorer (3 members, offline from `model2/finbert_cache/` via `bot/model2_bridge.py`), M3 DMN momentum (5 members), M4 volatility (inverse-vol sizing), M5 regime detector (gross_long_target 0.92/0.75/0.40), M6 event tagger (±0.75 thresholds); rules fallback on any failure; ensemble | `score[ticker]`, `regime`, `vol[ticker]` |
+| **Ensemble Weights** | **Updated 2026-10-29:** statistically estimated by `bot/portfolio/weight_optimizer.py` (Spearman IC + Markowitz-on-IC + Monte-Carlo bootstrap → `{rank 0.258, news 0.322, mom 0.420}` from `configs/optimized_weights.json`); **UCB1 RL tuner** (`bot/portfolio/rl_tuner.py`, 5 arms incl. optimized arm 0) overrides weights daily and learns from realized equity deltas | live weights |
+| **Portfolio Constructor** | Scores → target weights → share deltas; turnover & cost gate; **Updated 2026-10-29:** cash-utilization targeting (85%), unconditional marginal-trade filter (notional < 50× brokerage skipped), exit floor ₹5K vs entry floor ₹75K | `ProposedOrders` |
 | **Tax Engine** | Lot tracking, STCG/LTCG estimate, LTCG-wait, loss/gain harvesting suggestions | tax-adjusted edge, harvest orders |
 | **Risk Manager** | Hard limits, drawdown breaker, settlement calendar, cash buffer, final veto | `ApprovedOrders` |
-| **Order Manager** | Client-side validation, priority queue, token-bucket rate limiter, async send, 429/timeout handling, reconciliation | fills, rejections |
+| **Order Manager** | Client-side validation, priority queue, token-bucket rate limiter, async send, 429/timeout handling, reconciliation. **Updated 2026-10-29 — zero-rejection architecture:** in-flight cash reservation, SELL/COVER clamped to server-verified holdings (negative holdings = shorts), BUY clamped to server cash × 0.90 × 0.98 − brokerage, POST retried ≤3× (1s/2s backoff; 429 → penalty-box + 5s/10s), give-up paths return `UNKNOWN` + immediate resync (never a phantom fill), server caches updated optimistically on FILLED | fills, rejections |
 | **Portfolio Ledger** | Local cash/lots/margin/short state; applies fills; mirrors platform rules | equity, exposure |
 | **Decision Journal** | One record per ticker-decision (incl. HOLD), with features, scores, reasons, latency | JSONL/SQLite |
 | **Recorder** | Separate process; writes every Kafka message to Parquet | training data |
@@ -100,6 +101,13 @@ BOOT ──► DISCOVER (GET /stocks, /history warm-up) ──► PREFLIGHT (hea
    Any state ──► SAFE_MODE (kill switch / repeated errors / ACCOUNT_BLOCKED): only risk-reducing orders
 ```
 
+**Updated 2026-10-29 — observed live boot sequence:** M1(5)+M2(3)+M3(5) model members load →
+universe discovery (10 tickers, retries 12×/5s — the platform is slow to open discovery right
+after boot) → backfill ~1,920 candles → `kafka_connected` → preflight Ready (ACKs seq 1000+)
+→ TRADING, orders FILLED on server. `SAFE_MODE → PREFLIGHT` was made a legal transition, and
+`RiskManager.seed_equity()` seeds the drawdown peak from the first reconcile (fixes a boot-time
+"drawdown 100%" false-positive that used to bounce the bot into SAFE_MODE on every restart).
+
 In the **development** stage the bot runs the same TRADING logic against the sandbox loop
 (with `env=sandbox`, which enables loop-detection resets).
 
@@ -116,7 +124,7 @@ In the **development** stage the bot runs the same TRADING logic against the san
 | Failure | Detection | Response |
 |---------|-----------|----------|
 | Kafka disconnect | consumer error / no ticks for 2× interval | reconnect with backoff; no orders on stale data |
-| HTTP timeout on order | > 1.5 s no response | **do not blindly retry**: `GET /orders`, resend only if absent |
+| HTTP timeout on order | > 1.5 s no response | **Updated 2026-10-29:** retry POST ≤3× with 1s/2s backoff; on give-up return status `UNKNOWN` and fire `on_state_divergence` → immediate `_reconcile` (never synthesize a fill from an empty response — that was the root cause of an `INSUFFICIENT_MARGIN: Selling 1142 shares exceeds current holding (-1166)` divergence) |
 | HTTP 429 | status code | pause all non-critical requests 31 s; journal it; lower limiter rate |
 | Rejection code | response body | map to handler (see doc 06); increment error metric; never repeat same order |
 | Model load/inference error | exception | fall back to rules strategy for that day |
@@ -127,7 +135,13 @@ In the **development** stage the bot runs the same TRADING logic against the san
 
 ## 9. Deployment
 
-- Run on one team laptop on wired/strong Wi-Fi during the live hour; second laptop runs the dashboard
-  and a **hot-standby** bot instance in `dry_run` mode (computes decisions, sends nothing) for failover.
-- Config via `config.yaml` + env vars (`BOT_ACCESS_TOKEN`, `SERVER_IP`, `TEAM_USERNAME`).
+**Updated 2026-10-29:**
+- **One bot instance only** — never run two consumers of group `group-mn2632`.
+- Entry points: `python -m bot.main --env sandbox` (non-interactive) or `python run_bot.py`
+  (single-file launcher prompting `[1] KAFKA` / `[2] SIMULATION`; flags `--mode`, `--check`;
+  token falls back to `jwt.txt`).
+- Config via `configs/default.yaml` + env vars (`BOT_ACCESS_TOKEN`, `SERVER_IP`, `TEAM_USERNAME`,
+  `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1` — FinBERT runs fully offline from
+  `model2/finbert_cache/`).
+- Reconcile cadence 15 s (`timing.reconcile_interval_s`); stage poll 10 s in simulation.
 - Kill switch: creating file `KILL` in the run dir (or dashboard button) → SAFE_MODE.
