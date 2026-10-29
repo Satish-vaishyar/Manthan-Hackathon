@@ -30,7 +30,7 @@ import os
 import signal
 import sys
 import time
-from datetime import date as _date, datetime
+from datetime import date as _date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -216,6 +216,20 @@ class TradingBot:
     async def _reconcile(self) -> None:
         try:
             raw = await self.api.get("/api/v1/portfolio")
+            # Portal returns `holdings` (longs list). Coerce into the
+            # `positions` field expected by PortfolioResponse before
+            # validation. Also accept `short_positions` / `open_shorts`
+            # for shorts (variants seen across portal versions).
+            if isinstance(raw, dict):
+                coerced = dict(raw)
+                if "positions" not in coerced and "holdings" in coerced:
+                    coerced["positions"] = coerced["holdings"]
+                if "shorts" not in coerced:
+                    for key in ("short_positions", "open_shorts", "shorts_list"):
+                        if key in coerced:
+                            coerced["shorts"] = coerced[key]
+                            break
+                raw = coerced
             p = PortfolioResponse.model_validate(raw)
             self.ledger.cash = p.cash
             self.ledger.initial_cash = p.cash
@@ -410,7 +424,7 @@ class TradingBot:
                 continue
             price = bundle.ticks[ev.ticker].close if ev.ticker in bundle.ticks else 0.0
             self.journal.record({
-                "ts_wall": datetime.utcnow().isoformat() + "Z",
+                "ts_wall": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "sim_date": bundle.simulated_date.isoformat(),
                 "ticker": ev.ticker,
                 "decision": "HOLD", "qty": 0, "price": price,

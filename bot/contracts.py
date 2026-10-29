@@ -119,15 +119,30 @@ class ShortPosition(_Base):
 
 
 class PortfolioResponse(_Base):
-    cash: float
-    equity: float  # cash + market value of longs - margin locked
-    realised_pnl: float
-    unrealised_pnl: float
+    """From GET /api/v1/portfolio
+
+    The portal uses both American (realized, available) and British (realised)
+    spellings across its endpoints, and may add fields like `total_wealth`,
+    `margin_locked`, `total_charges`, etc. that we don't model. We alias the
+    common variants so either spell works.
+    """
+    # Cash & equity — portal returns `available_cash` and `total_wealth` /
+    # `total_portfolio_value` for equity. Fall back to defaults if neither
+    # is present so a partial response still parses.
+    cash: float = Field(default=0.0, validation_alias="available_cash")
+    equity: float = Field(default=0.0, validation_alias="total_portfolio_value")
+    # P&L — portal uses American spelling (realized_pnl, unrealized_pnl).
+    realised_pnl: float = Field(default=0.0, validation_alias="realized_pnl")
+    unrealised_pnl: float = Field(default=0.0, validation_alias="unrealized_pnl")
+    # Positions — portal returns `holdings` (longs) and a separate shorts list;
+    # names vary across versions, so we coerce at parse time.
     positions: list[Position] = Field(default_factory=list)
     shorts: list[ShortPosition] = Field(default_factory=list)
     day_trades_remaining: Optional[int] = None
     orders_today: Optional[int] = None
-    timestamp: datetime
+    # Portal does not include a timestamp on the portfolio response; default
+    # to "now" so downstream code always sees a valid timestamp.
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
 class StageInfo(_Base):
