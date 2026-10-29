@@ -377,3 +377,17 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
 |--------|---------|
 | `641b9e7` | fix CWD-anchored paths + negative lot age (legacy exit freeze) |
 | `df09061` | disable fresh_entry_only + entry_timing (entry starvation) |
+
+## 2026-10-30 (late) — P3-22/23/24: RL ticker bandit + stepped trailing SL + deployer rewrite
+- **Idle-cash deployer rewrite** (dff48d8): fired 0 times before (single-candidate no-op at cap);
+  now walks ranked candidates, sizes each BUY to remaining per-name cap room; risk.max_name_weight
+  unified to 0.20 (0.15 silently vetoed 20%-target orders). Utilisation checks run every 15s reconcile.
+- **P3-22 TickerBandit** (899712f): per-ticker EMA bandit fed realised P&L on SELL/COVER fills;
+  score multiplier = clamp(1 + 0.5*z, 0.5, 1.15), z = EMA(pnl)/EMA(|pnl|). Penalises chronic losers,
+  mildly rewards winners; neutral until 2 obs. apply_sell now returns realised net P&L.
+- **P3-23 take-profit 10%** (899712f, later disabled): booked AERX +15.2% live; superseded by P3-24.
+- **P3-24 stepped trailing SL** (f83d1ec, user spec): -10% initial; +3% gain -> breakeven stop;
+  +5% -> entry+3%; then +2% lock steps behind the stored peak close (never lowers). Same-day
+  re-entry blocked. Continuous-trail precursor (1226551) verified live: SONA +2.8% booked,
+  HAVN cut at -5.5%.
+- Tests 232 passing.
