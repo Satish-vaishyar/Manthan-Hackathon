@@ -357,3 +357,23 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
 | `12ac34c` | code documentation: section comments, 31 files |
 | `4dd7ce8` | docs: full refresh of all 13 docs |
 | `260ec9d` | 15-item list: 8 overlays + research tooling + NewsDecay fix (212 tests) |
+
+### 2026-10-30 (cont.) — Live diagnosis: entry starvation fixed; retrain verdict NO-DEPLOY
+- **Root cause of "no orders placed"**: `fresh_entry_only` + `entry_timing`
+  overlays vetoed 100% of entries on the 10-name universe (persistent top-3
+  membership; top scorers below their own trailing median). Both disabled in
+  `configs/default.yaml` (features remain implemented; re-enable only for
+  larger universes). Result: **15 new FILLED orders, 0 rejections**; account
+  rebalanced (8 legacy longs liquidated, 3 new conviction positions).
+- **Agent C retrain verdict (items #1/#12)**: purged walk-forward (K=5,
+  purge M1=5d/M3=21d, seeds 42-44) — live artifacts WIN: M1 IC +0.0486 vs
+  +0.0235 retrained; M3 +0.0455 vs +0.0163. **NO-DEPLOY**, artifacts
+  untouched. Reports: `runs/_retrain_report.md`, `runs/_retrain_verdict.md`.
+  Note: M1 live contract is the CSTT `.pt` (x/tmask/nmask), so the LGBM
+  ONNX was benchmark-only; CSTT retrain OOM-killed on CPU folds 1+.
+- Test asserting gate defaults updated to match new defaults. 216 passing.
+
+| Commit | Content |
+|--------|---------|
+| `641b9e7` | fix CWD-anchored paths + negative lot age (legacy exit freeze) |
+| `df09061` | disable fresh_entry_only + entry_timing (entry starvation) |

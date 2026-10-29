@@ -72,7 +72,10 @@ def test_config_yaml_loads_improvements(monkeypatch) -> None:
     assert s.strategy.mom_horizon_weights == {"d5": 0.3, "d10": 0.4, "d20": 0.3}
     assert s.strategy.min_hold_days == 3
     assert s.strategy.entry_timing is not None
-    assert s.strategy.entry_timing.enabled is True
+    # Disabled by default since 2026-10-30 (live diag: starved 100% of
+    # entries on the 10-name universe -> zero order flow). Feature stays
+    # implemented; tests below enable it explicitly.
+    assert s.strategy.entry_timing.enabled is False
     assert s.strategy.entry_timing.top_n == 2
     assert s.strategy.entry_timing.lookback_days == 20
     assert s.strategy.entry_timing.min_history == 3
@@ -81,7 +84,7 @@ def test_config_yaml_loads_improvements(monkeypatch) -> None:
     assert s.strategy.disagreement_gate.enabled is True
     assert s.strategy.disagreement_gate.threshold == pytest.approx(0.1)
     assert s.strategy.mean_reversion_in_risk_off is True
-    assert s.strategy.fresh_entry_only is True
+    assert s.strategy.fresh_entry_only is False  # same live-diag reason as above
     assert s.signals.vol_scale_scores is True
 
 
