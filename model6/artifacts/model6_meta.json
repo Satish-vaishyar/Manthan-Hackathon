@@ -1,0 +1,165 @@
+{
+  "model": "model6-EventTagger",
+  "calibrated": true,
+  "taxonomy_sha1": "f82a02214e2a",
+  "events": {
+    "EARNINGS_BEAT": {
+      "polarity": 1,
+      "impact_bps": 79.5
+    },
+    "EARNINGS_MISS": {
+      "polarity": -1,
+      "impact_bps": -118.3
+    },
+    "GUIDANCE_UP": {
+      "polarity": 1,
+      "impact_bps": 100.0
+    },
+    "GUIDANCE_DOWN": {
+      "polarity": -1,
+      "impact_bps": -150.0
+    },
+    "DIVIDEND": {
+      "polarity": 1,
+      "impact_bps": 20.0
+    },
+    "BUYBACK": {
+      "polarity": 1,
+      "impact_bps": 40.0
+    },
+    "CONTRACT_WIN": {
+      "polarity": 1,
+      "impact_bps": 50.8
+    },
+    "PARTNERSHIP": {
+      "polarity": 1,
+      "impact_bps": 26.3
+    },
+    "PRODUCT_LAUNCH": {
+      "polarity": 1,
+      "impact_bps": 12.8
+    },
+    "APPROVAL": {
+      "polarity": 1,
+      "impact_bps": 100.0
+    },
+    "REJECTION": {
+      "polarity": -1,
+      "impact_bps": -200.0
+    },
+    "MNA_TARGET": {
+      "polarity": 1,
+      "impact_bps": 300.0
+    },
+    "MNA_ACQUIRER": {
+      "polarity": 0,
+      "impact_bps": -30.0
+    },
+    "ANALYST_UPGRADE": {
+      "polarity": 1,
+      "impact_bps": 60.3
+    },
+    "ANALYST_DOWNGRADE": {
+      "polarity": -1,
+      "impact_bps": -80.0
+    },
+    "VALUATION_CONCERN": {
+      "polarity": -1,
+      "impact_bps": -16.0
+    },
+    "REGULATORY_ACTION": {
+      "polarity": -1,
+      "impact_bps": -122.0
+    },
+    "LEGAL_WIN": {
+      "polarity": 1,
+      "impact_bps": 48.9
+    },
+    "MGMT_EXIT": {
+      "polarity": -1,
+      "impact_bps": -60.0
+    },
+    "MGMT_HIRE": {
+      "polarity": 1,
+      "impact_bps": 9.8
+    },
+    "LAYOFFS": {
+      "polarity": 0,
+      "impact_bps": 10.3
+    },
+    "DEBT_DISTRESS": {
+      "polarity": -1,
+      "impact_bps": -300.0
+    },
+    "CAPITAL_RAISE": {
+      "polarity": -1,
+      "impact_bps": -148.9
+    },
+    "INSIDER_SELL": {
+      "polarity": -1,
+      "impact_bps": -26.9
+    },
+    "INSIDER_BUY": {
+      "polarity": 1,
+      "impact_bps": 40.0
+    },
+    "SAFETY_BREACH": {
+      "polarity": -1,
+      "impact_bps": -79.5
+    },
+    "LABOR_STRIKE": {
+      "polarity": -1,
+      "impact_bps": -36.5
+    },
+    "EXPANSION": {
+      "polarity": 1,
+      "impact_bps": 28.9
+    },
+    "DEMAND_STRONG": {
+      "polarity": 1,
+      "impact_bps": 65.1
+    },
+    "DEMAND_WEAK": {
+      "polarity": -1,
+      "impact_bps": -60.0
+    },
+    "STOCK_UP": {
+      "polarity": 1,
+      "impact_bps": 29.9
+    },
+    "STOCK_DOWN": {
+      "polarity": -1,
+      "impact_bps": -25.4
+    },
+    "MACRO_TRADE": {
+      "polarity": -1,
+      "impact_bps": -27.5
+    }
+  },
+  "features": [
+    "ev_EARNINGS_BEAT",
+    "ev_CONTRACT_WIN",
+    "ev_DEBT_DISTRESS",
+    "ev_ANALYST_DOWNGRADE",
+    "ev_GUIDANCE_UP",
+    "ev_DEMAND_STRONG",
+    "ev_REGULATORY_ACTION",
+    "event_score",
+    "ev_CAPITAL_RAISE",
+    "ev_GUIDANCE_DOWN",
+    "max_abs_impact_bps",
+    "ev_EARNINGS_MISS",
+    "ev_MGMT_EXIT",
+    "ev_STOCK_UP",
+    "n_events",
+    "ev_PARTNERSHIP",
+    "ev_MNA_TARGET",
+    "ev_ANALYST_UPGRADE",
+    "rule_polarity",
+    "n_relevant_items",
+    "ev_STOCK_DOWN",
+    "has_event"
+  ],
+  "cpu_ms_busiest_day": 17.15,
+  "busiest_day_items": 19
+}

@@ -60,11 +60,11 @@
     },
     "PARTNERSHIP": {
       "prior_bps": 30.0,
-      "count": 7,
-      "n_eff": 3.12,
-      "mean_bps": 26.2,
-      "t_stat": 0.48,
-      "posterior_bps": 29.5
+      "count": 5,
+      "n_eff": 2.75,
+      "mean_bps": 39.5,
+      "t_stat": 0.55,
+      "posterior_bps": 31.1
     },
     "PRODUCT_LAUNCH": {
       "prior_bps": 15.0,
@@ -132,11 +132,11 @@
     },
     "REGULATORY_ACTION": {
       "prior_bps": -100.0,
-      "count": 9,
-      "n_eff": 3.38,
-      "mean_bps": -205.7,
-      "t_stat": -1.85,
-      "posterior_bps": -115.3
+      "count": 3,
+      "n_eff": 1.38,
+      "mean_bps": -479.3,
+      "t_stat": -1.38,
+      "posterior_bps": -124.4
     },
     "LEGAL_WIN": {
       "prior_bps": 50.0,
@@ -172,11 +172,11 @@
     },
     "DEBT_DISTRESS": {
       "prior_bps": -300.0,
-      "count": 2,
-      "n_eff": 0.25,
-      "mean_bps": 38.9,
-      "t_stat": 1.4,
-      "posterior_bps": -295.8
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": -300.0
     },
     "CAPITAL_RAISE": {
       "prior_bps": -150.0,
@@ -204,11 +204,11 @@
     },
     "SAFETY_BREACH": {
       "prior_bps": -80.0,
-      "count": 2,
-      "n_eff": 0.38,
-      "mean_bps": -22.6,
-      "t_stat": -0.31,
-      "posterior_bps": -78.9
+      "count": 0,
+      "n_eff": 0.0,
+      "mean_bps": 0.0,
+      "t_stat": null,
+      "posterior_bps": -80.0
     },
     "LABOR_STRIKE": {
       "prior_bps": -40.0,
@@ -220,11 +220,11 @@
     },
     "EXPANSION": {
       "prior_bps": 30.0,
-      "count": 7,
-      "n_eff": 1.07,
-      "mean_bps": 22.5,
-      "t_stat": 0.4,
-      "posterior_bps": 29.6
+      "count": 2,
+      "n_eff": 0.2,
+      "mean_bps": -76.3,
+      "t_stat": -0.47,
+      "posterior_bps": 28.9
     },
     "DEMAND_STRONG": {
       "prior_bps": 40.0,

@@ -51,7 +51,7 @@ events:
     polarity: 1
     prior_bps: 30
     patterns:
-      - '\b(strategic )?(partnership|collaboration|alliance|joint venture)\b'
+      - '\b(strategic )?(partnership|alliance|joint venture)\b|\bstrategic collaboration\b'
       - '\b(partners?|teams? up|ties? up|joins? forces) with\b'
   PRODUCT_LAUNCH:
     polarity: 1
@@ -100,8 +100,11 @@ events:
     polarity: -1
     prior_bps: -100
     patterns:
-      - '\b(probe|investigation|investigated|raid(ed|s)?|subpoena|antitrust|show[- ]cause|indicted|charged)\b'
-      - '\b(fined?|penalty|penalised|penalized|sanctioned)\b'
+      # generic crime words (charged, raids, indicted) only count when the company itself is the subject
+      - '\b(probe|subpoena|antitrust|show[- ]cause)\b'
+      - '\b(investigation|probe) (into|of) the company\b|\b(sec|doj|ftc|cci|sebi|regulators?|authorities|watchdog)\b[^.]{0,20}\b(probe|investigat\w+)\b'
+      - '\bthe company\b[^.]{0,30}\b(charged|indicted|raided|accused)\b'
+      - '\b(fined|fines? of|penalty|penalised|penalized)\b'
       - '\b(lawsuit|sued|sues|class action|litigation)\b'
   LEGAL_WIN:
     polarity: 1
@@ -128,7 +131,8 @@ events:
     polarity: -1
     prior_bps: -300
     patterns:
-      - '\b(default(s|ed)?|bankruptcy|chapter 11|insolvency|nclt|administration|liquidity crunch|missed (a )?(bond|debt|interest) payment)\b'
+      - '\b(default(s|ed)? on|bankruptcy|chapter 11|insolvency|nclt|liquidity crunch|missed (a )?(bond|debt|interest) payment)\b'
+      - '\b(goes|went|enters?|entered|placed|falls?) into administration\b'
       - '\b(credit rating|rating)\b[^.]{0,20}\b(cut|downgrade|junk)\b'
   CAPITAL_RAISE:
     polarity: -1
@@ -151,7 +155,9 @@ events:
     polarity: -1
     prior_bps: -80
     patterns:
-      - '\b(recall(s|ed)?|outage|data breach|breach|hack(ed|s)?|cyberattack|ransomware|explosion|fire at|accident|crash(es|ed)? (kills|injures))\b'
+      - '\b(product recall|recalls? [\d,]+|recall(s|ed)? (of )?(vehicles|cars|units|products|devices|batches))\b'
+      - '\b(outage|(data|security) breach|hack(ed|s)?|cyberattack|ransomware|explosion at|fire at)\b'
+      - '\bthe company\b[^.]{0,30}\b(accident|crash)\b'
   LABOR_STRIKE:
     polarity: -1
     prior_bps: -40
@@ -161,7 +167,11 @@ events:
     polarity: 1
     prior_bps: 30
     patterns:
-      - '\b(new (plant|factory|facility|store|stores|data cent(er|re))|expansion|expands?|capex|opens?)\b'
+      - '\bnew (plant|factory|facility|store|stores|office|data cent(er|re)|production line)\b'
+      - '\b(capacity|production|business|global|international) expansion\b|\bexpansion (plan|into|of (its|the company))\b'
+      - '\bexpands? (into|its|operations|capacity|production|presence)\b|\bcapex\b'
+      - '\bopens? (a |its )?(new )?(plant|factory|store|stores|office|facility|data cent(er|re))\b'
+      - '\b(invest|invests|investing|to invest) \$?[\d.,]+ ?(billion|bn|million|crore)\b'
   DEMAND_STRONG:
     polarity: 1
     prior_bps: 40

@@ -1,0 +1,281 @@
+kind,phrase,count,mean_y_bps,t_stat
+coverage,etf,9,,
+coverage,stock,6,,
+coverage,nasdaq,5,,
+coverage,review,4,,
+coverage,trump,3,,
+coverage,could,3,,
+coverage,post,3,,
+coverage,people,3,,
+coverage,long,3,,
+coverage,plty,3,,
+coverage,you,2,,
+coverage,shows,2,,
+coverage,million,2,,
+coverage,delivery,2,,
+coverage,shares,2,,
+coverage,analytics,2,,
+coverage,album review,2,,
+coverage,schubert,2,,
+coverage,performance,2,,
+coverage,album,2,,
+coverage,no,2,,
+coverage,piano,2,,
+coverage,americans,2,,
+coverage,transfer,2,,
+coverage,term,2,,
+coverage,pltg,2,,
+coverage,price,2,,
+coverage,workers,2,,
+coverage,aerovanguard,2,,
+coverage,major,2,,
+coverage,aerovanguard defense,2,,
+coverage,defense,2,,
+coverage,amid,2,,
+coverage,tech,2,,
+coverage,money,2,,
+coverage,daily,2,,
+coverage,daily etf,2,,
+coverage,yield,2,,
+coverage,firms,2,,
+coverage,uk,2,,
+lift,surf air,3,-77.1,-77111286805.21
+lift,surf,3,-77.1,-77111286805.21
+lift,stocks,3,63.5,25.78
+lift,bad,3,35.1,7.43
+lift,where,3,-83.0,-7.24
+lift,federal,3,32.1,4.63
+lift,so,5,-83.4,-4.16
+lift,america,4,103.6,4.09
+lift,return,4,99.9,3.83
+lift,global,3,211.1,3.48
+lift,etf,14,89.5,3.48
+lift,not,5,123.0,3.17
+lift,ice,3,-90.1,-2.95
+lift,what's,3,-52.8,-2.67
+lift,market,3,87.3,2.55
+lift,watch on tv,3,50.1,2.39
+lift,tv this week,3,50.1,2.39
+lift,best films,3,50.1,2.39
+lift,seven best films,3,50.1,2.39
+lift,films to watch,3,50.1,2.39
+lift,films,3,50.1,2.39
+lift,gaza,3,164.2,2.31
+lift,here,6,-68.8,-2.19
+lift,i'm,5,-60.6,-2.16
+lift,report,5,136.6,2.12
+lift,last,3,96.8,2.1
+lift,la,4,-43.0,-2.07
+lift,group,4,117.3,2.05
+lift,against,6,-37.1,-2.03
+lift,tonight,3,44.8,2.0
+lift,tv tonight,3,44.8,2.0
+lift,partnership,3,-17.9,-1.97
+lift,use,10,139.9,1.97
+lift,defense,8,148.8,1.9
+lift,all,5,-95.5,-1.87
+lift,it's,6,-37.0,-1.82
+lift,going,5,-46.1,-1.82
+lift,surges,3,-324.3,-1.73
+lift,deep,3,-90.0,-1.71
+lift,used,4,-94.7,-1.7
+lift,can,10,23.8,1.66
+lift,analytics,3,469.6,1.65
+lift,trade,3,-96.1,-1.62
+lift,contractors,5,199.6,1.62
+lift,air,5,-249.1,-1.57
+lift,iran,4,-218.6,-1.57
+lift,your,4,-42.4,-1.51
+lift,plans,4,-212.3,-1.47
+lift,major,5,73.3,1.47
+lift,survival,3,464.4,1.46
+lift,office,3,192.5,1.46
+lift,americans,4,-214.4,-1.45
+lift,star,5,92.7,1.44
+lift,protests,3,-80.4,-1.43
+lift,let,6,149.6,1.43
+lift,i've,4,-57.0,-1.41
+lift,may,4,-34.1,-1.39
+lift,could,5,-125.0,-1.34
+lift,really,3,-116.6,-1.33
+lift,week,10,24.1,1.31
+lift,democrats,3,-85.4,-1.31
+lift,israel's,3,-252.0,-1.29
+lift,workers,3,-45.3,-1.28
+lift,arrested,3,-346.1,-1.27
+lift,finally,4,51.9,1.26
+lift,post,3,95.2,1.26
+lift,stock,12,174.8,1.25
+lift,agencies,4,195.8,1.23
+lift,use echolm,4,195.8,1.23
+lift,agencies and defense,4,195.8,1.23
+lift,us national security,4,195.8,1.23
+lift,us national,4,195.8,1.23
+lift,contractors use echolm,4,195.8,1.23
+lift,let us,4,195.8,1.23
+lift,finds,3,86.3,1.23
+lift,final,3,-46.0,-1.23
+lift,echolm,4,195.8,1.23
+lift,echolm ai,4,195.8,1.23
+lift,synapse to let,4,195.8,1.23
+lift,security agencies,4,195.8,1.23
+lift,defense contractors,4,195.8,1.23
+lift,let us national,4,195.8,1.23
+lift,use echolm ai,4,195.8,1.23
+lift,national security agencies,4,195.8,1.23
+lift,contractors use,4,195.8,1.23
+lift,defense contractors use,4,195.8,1.23
+lift,house,3,156.4,1.22
+lift,chosen,3,33.5,1.21
+lift,synapse,10,98.9,1.21
+lift,national security,5,154.9,1.2
+lift,security,5,154.9,1.2
+lift,boost,3,171.6,1.2
+lift,watch,5,30.8,1.19
+lift,music,6,82.3,1.19
+lift,sell,3,218.5,1.19
+lift,williams,3,130.5,1.18
+lift,seven best,8,26.7,1.15
+lift,companies,4,41.0,1.13
+lift,best,19,20.2,1.13
+lift,but,11,56.1,1.13
+lift,scrap,3,121.4,1.1
+lift,when,4,-77.1,-1.09
+lift,strategic,4,57.9,1.09
+lift,film,3,159.5,1.08
+lift,seven,9,22.2,1.06
+lift,unlikely,3,157.2,1.06
+lift,nasdaq,9,193.7,1.05
+lift,people,6,104.8,1.04
+lift,rise,4,30.1,1.03
+lift,tech,10,-108.5,-1.03
+lift,stephen,3,206.3,1.03
+lift,pricing,3,-38.5,-1.03
+lift,obituary,3,-144.5,-1.03
+lift,ceo,3,-34.9,-1.01
+lift,money,4,-147.0,-0.99
+lift,firms,7,61.3,0.99
+lift,day,3,69.9,0.98
+lift,buy,6,57.8,0.96
+lift,like,4,130.4,0.95
+lift,nsw,3,-101.7,-0.94
+lift,police,6,-52.2,-0.9
+lift,arms,3,66.6,0.89
+lift,joe,3,40.2,0.89
+lift,power,3,62.3,0.88
+lift,review,27,34.0,0.88
+lift,need,4,-35.6,-0.86
+lift,ever,3,182.1,0.85
+lift,shares,6,64.5,0.83
+lift,long,3,94.9,0.82
+lift,go,4,45.6,0.81
+lift,their,6,-84.7,-0.8
+lift,say nothing,4,98.6,0.79
+lift,officials,3,-112.3,-0.79
+lift,nothing,4,98.6,0.79
+lift,pm,3,80.2,0.78
+lift,red,5,47.2,0.77
+lift,rises,3,-159.2,-0.77
+lift,mission,3,-252.9,-0.76
+lift,protest,4,-177.7,-0.75
+lift,say,6,61.6,0.75
+lift,cuts,4,-54.5,-0.74
+lift,order,3,69.4,0.74
+lift,potential,3,-60.3,-0.74
+lift,tn,3,57.3,0.73
+lift,way,4,47.9,0.73
+lift,win,4,20.5,0.73
+lift,me,8,-12.2,-0.73
+lift,australia,5,-60.1,-0.72
+lift,should you,3,85.6,0.71
+lift,before,3,-43.5,-0.71
+lift,high,3,55.7,0.71
+lift,should,3,85.6,0.71
+lift,data,4,-172.3,-0.71
+lift,hannah,4,32.1,0.68
+lift,we,9,-18.2,-0.67
+lift,harris,4,23.2,0.66
+lift,first,7,44.2,0.66
+lift,million,3,144.0,0.65
+lift,under,4,61.5,0.65
+lift,album review,7,-48.0,-0.64
+lift,album,7,-48.0,-0.64
+lift,plty,3,-94.4,-0.63
+lift,amid,5,-43.4,-0.63
+lift,tax,3,64.0,0.62
+lift,plan,4,104.1,0.62
+lift,york,5,-103.3,-0.62
+lift,eu,3,107.8,0.62
+lift,his,5,82.7,0.61
+lift,top,5,-45.5,-0.6
+lift,my,9,20.1,0.58
+lift,piano,4,-79.6,-0.58
+lift,justice,3,-39.1,-0.58
+lift,nuclear,6,-34.1,-0.57
+lift,ambition,3,-37.8,-0.56
+lift,happy,4,79.6,0.52
+lift,jobs,4,-32.7,-0.52
+lift,white,3,54.9,0.52
+lift,peter,3,67.3,0.49
+lift,old,4,44.3,0.48
+lift,inside,3,86.9,0.47
+lift,tv,12,12.2,0.46
+lift,now,5,-28.5,-0.45
+lift,build,3,36.7,0.45
+lift,national,6,63.3,0.45
+lift,shows,9,9.9,0.44
+lift,just,5,10.9,0.44
+lift,season,4,24.7,0.42
+lift,movie,6,-19.0,-0.41
+lift,welfare,3,-32.5,-0.41
+lift,never,3,-15.7,-0.41
+lift,fight,3,-19.7,-0.38
+lift,history,3,-20.4,-0.37
+lift,world,3,-24.2,-0.37
+lift,us,24,13.0,0.37
+lift,stream,5,12.7,0.36
+lift,best shows,5,12.7,0.36
+lift,stream this week,5,12.7,0.36
+lift,happened,22,-16.1,-0.36
+lift,seven best shows,5,12.7,0.36
+lift,shows to stream,5,12.7,0.36
+lift,hannah thomas,3,23.1,0.35
+lift,thomas,3,23.1,0.35
+lift,chess,4,22.6,0.32
+lift,cut,3,-21.6,-0.32
+lift,trump,19,-24.4,-0.3
+lift,uk,15,11.8,0.3
+lift,if,3,46.3,0.28
+lift,life,6,-11.1,-0.26
+lift,saga,3,20.9,0.25
+lift,rules,5,40.8,0.24
+lift,love,3,49.9,0.24
+lift,ai,21,-11.9,-0.19
+lift,big,4,10.4,0.19
+lift,you,9,11.1,0.18
+lift,man,8,-10.1,-0.18
+lift,add,3,18.1,0.17
+lift,tracks,3,18.1,0.17
+lift,add to playlist,3,18.1,0.17
+lift,week's,3,18.1,0.17
+lift,record,3,-20.5,-0.17
+lift,playlist,3,18.1,0.17
+lift,week's best,3,18.1,0.17
+lift,city,4,5.8,0.16
+lift,no,7,-7.9,-0.15
+lift,risk,3,-10.2,-0.14
+lift,trump's,7,6.1,0.13
+lift,he,5,18.1,0.12
+lift,know,3,-8.3,-0.11
+lift,fighter,3,6.2,0.1
+lift,two,7,2.7,0.07
+lift,her,5,-3.5,-0.06
+lift,one,4,3.0,0.06
+lift,bear,3,-5.8,-0.06
+lift,behind,3,-8.1,-0.04
+lift,years,5,1.9,0.04
+lift,israel,6,2.5,0.04
+lift,england,3,5.4,0.04
+lift,here's,5,2.2,0.02
+lift,war,5,1.1,0.02
+lift,family,4,0.0,0.0

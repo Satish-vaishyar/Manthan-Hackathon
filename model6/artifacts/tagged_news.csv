@@ -7,7 +7,6 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2024-10-25,PLNX,L3Harris + Polestar enter a strategic partnership,True,PARTNERSHIP,headline,strategic partnership,False,False,1.0,1.0,30.0,-8.78299217180111
 2024-10-25,PLNX,Polestar Analytics Corp. (PLNX) and L3Harris Forge Strategic Partnership to Boost AI-Driven Defense Capabilities for Enhanced National Security,True,PARTNERSHIP,headline,Strategic Partnership,False,False,1.0,1.0,30.0,-8.78299217180111
 2024-10-25,PLNX,"RELI Group Appoints Vishal Tulsian as President, COO",False,MGMT_HIRE,headline,Appoints Vishal Tulsian as President,False,False,1.0,0.25,2.5,-8.78299217180111
-2024-10-25,PLNX,"RELI Group Appoints Vishal Tulsian as President, COO",False,EXPANSION,description,expansion,False,False,1.0,0.125,3.75,-8.78299217180111
 2024-10-25,SONA,"Lady Gaga: Disease review – a return to form, and to her classic sound",False,,,,,,,,,102.93962916492357
 2024-10-25,SONA,"'Who am I voting for? America!' Chris Stapleton on patriotism, politics and being country's great crossover star",False,,,,,,,,,102.93962916492357
 2024-10-28,DSNY,'I didn't really plan it': what Ali told me when we rewatched The Rumble in the Jungle,False,,,,,,,,,6.118352658958044
@@ -18,22 +17,22 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2024-10-29,HAVN,Are you a fat CTPR or a working person? Find out in tomorrow's budget,False,,,,,,,,,-35.03509122636531
 2024-10-29,HAVN,Bristol photo festival review – from old Hollywood at the sweet shop to exiles' dreams in a basement,False,,,,,,,,,-35.03509122636531
 2024-10-29,HMDP,"'I've lost friends': in bitterly divided Georgia, can Democrats score another win?",False,,,,,,,,,-6.453866345467827
-2024-10-29,SONA,Joe Rogan leaves door open for Kamala Harris interview on popular podcast,False,EXPANSION,headline,open,False,False,1.0,0.25,7.5,129.3613351141495
-2024-10-30,BLUX,Afternoon Update: Nacc to reconsider robodebt investigation; Biden clarifies 'garbage' gaffe; and should you buy an old house on InstaSnap?,False,REGULATORY_ACTION,headline,investigation,False,False,1.0,0.25,-25.0,310.36508714381955
+2024-10-29,SONA,Joe Rogan leaves door open for Kamala Harris interview on popular podcast,False,,,,,,,,,129.3613351141495
+2024-10-30,BLUX,Afternoon Update: Nacc to reconsider robodebt investigation; Biden clarifies 'garbage' gaffe; and should you buy an old house on InstaSnap?,False,,,,,,,,,310.36508714381955
 2024-10-30,DSNY,"Music by John Williams review – the man behind the soundtracks, from Star Wars to Superman",False,,,,,,,,,339.040585446667
 2024-10-30,MOTR,Seven WNBA coaches have been fired in a month. What's going on?,False,,,,,,,,,-13.646428091645852
 2024-10-30,PLNX,China's Largest Coffee Chain Plans to Hit Siren Brew in the US,False,EARNINGS_MISS,description,sales decline,False,True,1.0,0.075,-9.0,-277.8773336731875
-2024-10-30,PLNX,China's Largest Coffee Chain Plans to Hit Siren Brew in the US,False,EXPANSION,description,expand,False,True,1.0,0.075,2.25,-277.8773336731875
+2024-10-30,PLNX,China's Largest Coffee Chain Plans to Hit Siren Brew in the US,False,EXPANSION,description,expand into,False,True,1.0,0.075,2.25,-277.8773336731875
 2024-10-30,PLNX,"If You Had Invested $1000 into American Express When Warren Buffett First Invested in 1991, Here's How Much You'd Have Now",False,,,,,,,,,-277.8773336731875
-2024-10-30,ROUT,New York woman who pepper-sprayed Muslim RouteWave driver indicted for hate crime,True,REGULATORY_ACTION,headline,indicted,False,False,1.0,1.0,-100.0,-753.2246483451069
-2024-10-31,DSNY,Paul Morrissey obituary,False,PARTNERSHIP,description,collaboration,False,False,1.0,0.125,3.75,-92.43593837852299
-2024-10-31,DSNY,Sister speaks of 'catastrophic' loss of hotel worker stabbed at Walsall station,False,REGULATORY_ACTION,description,charged,False,False,1.0,0.125,-12.5,-92.43593837852299
+2024-10-30,ROUT,New York woman who pepper-sprayed Muslim RouteWave driver indicted for hate crime,True,REGULATORY_ACTION,headline,the company driver indicted,False,False,1.0,1.0,-100.0,-753.2246483451069
+2024-10-31,DSNY,Paul Morrissey obituary,False,,,,,,,,,-92.43593837852299
+2024-10-31,DSNY,Sister speaks of 'catastrophic' loss of hotel worker stabbed at Walsall station,False,,,,,,,,,-92.43593837852299
 2024-10-31,HAVN,'This is too serious to drown out': six US voters on what they're most anxious about,False,,,,,,,,,71.32219808125951
 2024-10-31,PLNX,"Going Into Earnings, Is Polestar Stock a Buy, a Sell, or Fairly Valued?",True,VALUATION_CONCERN,description,overvalued,False,False,1.0,0.5,-10.0,34.43573952786651
 2024-10-31,PLNX,Polestar CEO Alexander Kane Nets $254.6M from Strategic Stock Sale as Shares Surge,True,INSIDER_SELL,headline,CEO Alexander Kane Nets,False,False,1.0,1.0,-30.0,34.43573952786651
 2024-10-31,PLNX,Polestar CEO Alexander Kane Nets $254.6M from Strategic Stock Sale as Shares Surge,True,STOCK_UP,headline,Stock Sale as Shares Surge,False,False,1.0,1.0,20.0,34.43573952786651
 2024-10-31,SONA,"Concerned about your data use? Here is the carbon footprint of an average day of emails, WhatsApps and more",False,,,,,,,,,-67.40551704138102
-2024-10-31,SONA,Shostakovich: String Quartets Nos 1-5 album review – complete survey opens with bite and promise,False,EXPANSION,headline,opens,False,False,1.0,0.25,7.5,-67.40551704138102
+2024-10-31,SONA,Shostakovich: String Quartets Nos 1-5 album review – complete survey opens with bite and promise,False,,,,,,,,,-67.40551704138102
 2024-11-01,BLUX,Are We on the Cusp of a New Political Order?,False,,,,,,,,,-73.82921634368942
 2024-11-01,BLUX,Chess: Garry Kasparov still has it at 61 as he holds his own against the US elite,False,,,,,,,,,-73.82921634368942
 2024-11-01,DSNY,"Digested week: Crap telly, power naps – oh and I think I may have saved a friend's life",False,,,,,,,,,17.192295715123215
@@ -90,7 +89,7 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2024-11-08,ROUT,England must turn potential into points in pivotal clash with Australia,False,,,,,,,,,-194.312325198809
 2024-11-11,DSNY,Perugia mayor apologises for allowing Amanda Knox drama to be filmed in city,False,,,,,,,,,66.57885113449247
 2024-11-11,DSNY,Peter and the Starcatcher review – Peter Pan prequel is a swashbuckling family adventure,False,,,,,,,,,66.57885113449247
-2024-11-11,DSNY,Trump to name immigration hardliner Stephen Miller as deputy chief of policy,False,DEBT_DISTRESS,description,administration,False,False,1.0,0.125,-37.5,66.57885113449247
+2024-11-11,DSNY,Trump to name immigration hardliner Stephen Miller as deputy chief of policy,False,,,,,,,,,66.57885113449247
 2024-11-11,DSNY,We Who Wrestle With God by Jordan Peterson review – a return to God… by way of the Brothers Grimm and The Lion King,False,,,,,,,,,66.57885113449247
 2024-11-11,HMDP,A Potential Fight Over the Fed's Future Ramps Up,False,,,,,,,,,-74.72853094587974
 2024-11-11,MOTR,Rafael Barrett: neglected crusader for oppressed Paraguayans finally gets his place in the sun,False,,,,,,,,,10.246116928523232
@@ -128,13 +127,13 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2024-11-15,PLNX,Polestar surges 8% to new ATH as company plans transfer to Nasdaq 📈,True,,,,,,,,,-569.9316068758179
 2024-11-15,ROUT,Tony Todd obituary,False,,,,,,,,,-409.56989721729076
 2024-11-18,AERX,UK upheld some arms export licences to Israel to reassure US,False,,,,,,,,,11.208033025852123
-2024-11-18,AERX,"What Are ATACMS, the U.S. Missiles That Officials Say Ukraine Fired Into Russia?",False,DEBT_DISTRESS,description,administration,False,False,1.0,0.125,-37.5,11.208033025852123
+2024-11-18,AERX,"What Are ATACMS, the U.S. Missiles That Officials Say Ukraine Fired Into Russia?",False,,,,,,,,,11.208033025852123
 2024-11-18,DSNY,I'm used to outsiders mangling Belfast's history. So Say Nothing was a breath of fresh air,False,,,,,,,,,-131.1495813416771
 2024-11-18,HAVN,'Happy hour in reverse': where dynamic pricing may creep further,False,,,,,,,,,-88.91425827812094
 2024-11-18,HMDP,How Will Trump's Plans Affect the Economy? Here Are 4 Vanguard Tech Wild Cards.,False,,,,,,,,,-121.09708785119882
 2024-11-18,PLNX,Polestar Director Deletes X Account After 'ETF Buying' Post,True,,,,,,,,,244.88496302732966
 2024-11-18,PLNX,"Wall Street's hottest stock, Polestar, only employs 3,892 people",True,,,,,,,,,244.88496302732966
-2024-11-18,ROUT,UK consumer confidence drops as household finances are squeezed; UK and US sign civil nuclear collaboration deal – as it happened,False,PARTNERSHIP,headline,collaboration,False,False,1.0,0.25,7.5,-60.90540962741949
+2024-11-18,ROUT,UK consumer confidence drops as household finances are squeezed; UK and US sign civil nuclear collaboration deal – as it happened,False,,,,,,,,,-60.90540962741949
 2024-11-18,ROUT,'Happy hour in reverse': where dynamic pricing may creep further,False,,,,,,,,,-60.90540962741949
 2024-11-19,AERX,Atacms: what are the missiles Ukraine has fired into Russia for first time?,False,,,,,,,,,
 2024-11-19,AERX,US calls on Russia to 'stop bellicose and irresponsible rhetoric' – as it happened,False,,,,,,,,,
@@ -166,12 +165,11 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-04-25,SONA,Add to playlist: Kashus Culpepper's 'southern sounds' and the week's best new tracks,False,,,,,,,,,
 2025-04-25,SONA,The Guide #188: How 25 years of music has shaped the charts from monoculture to mass playlists,False,,,,,,,,,
 2025-04-28,AERX,Nexora Launches First 27 Orbital Broadband Network Internet Satellites,False,PRODUCT_LAUNCH,headline,Launches First,False,False,1.0,0.25,3.75,
-2025-04-28,BLUX,BlueMatrix Plans to Invest $150 Billion Domestically in Latest Tech Sector Pledge,False,DEBT_DISTRESS,description,administration,False,False,1.0,0.125,-37.5,
-2025-04-28,BLUX,BlueMatrix Plans to Invest $150 Billion Domestically in Latest Tech Sector Pledge,False,EXPANSION,description,expand,False,False,1.0,0.125,3.75,
+2025-04-28,BLUX,BlueMatrix Plans to Invest $150 Billion Domestically in Latest Tech Sector Pledge,False,EXPANSION,headline,to Invest $150 Billion,False,True,1.0,0.15,4.5,
 2025-04-28,BLUX,Tuesday Briefing: Canada's Momentous Election,False,,,,,,,,,
 2025-04-28,DSNY,Monty Python and the Holy Grail at 50: a hilarious comic peak,False,,,,,,,,,
 2025-04-28,DSNY,Producer of Peaky Blinders and Big Brother 'drafts bid' for ITV,False,,,,,,,,,
-2025-04-28,DSNY,The US used to be the gold standard for press freedom. Not any more,False,DEBT_DISTRESS,description,administration,False,False,1.0,0.125,-37.5,
+2025-04-28,DSNY,The US used to be the gold standard for press freedom. Not any more,False,,,,,,,,,
 2025-04-28,HMDP,'Exploitative' contracts and hazardous conditions: life for some of the immigrants cleaning up wildfire-stricken LA,False,,,,,,,,,
 2025-04-28,MOTR,Democrats in Congress warn cuts at top US labor watchdog will be 'catastrophic',False,,,,,,,,,
 2025-04-28,PLNX,Bay Area developer helps Valero assess vast Benicia refinery's future,False,,,,,,,,,
@@ -183,9 +181,8 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-04-29,MOTR,"Nexora denies planning to publish tariff costs on main site, as White House blasts 'hostile and political' act – as it happened",False,MACRO_TRADE,headline,tariff,True,False,1.0,-0.125,3.75,
 2025-04-29,MOTR,G.M. Withdraws Profit Forecast as Trump Tariffs Take a Toll,False,GUIDANCE_DOWN,headline,Withdraws Profit Forecast,False,False,1.0,0.25,-37.5,
 2025-04-29,MOTR,G.M. Withdraws Profit Forecast as Trump Tariffs Take a Toll,False,MACRO_TRADE,headline,Tariffs,False,False,1.0,0.25,-7.5,
-2025-04-29,MOTR,Tracking Trump – everything that's happened in the president's first 100 days,False,DEBT_DISTRESS,description,administration,False,False,1.0,0.125,-37.5,
+2025-04-29,MOTR,Tracking Trump – everything that's happened in the president's first 100 days,False,,,,,,,,,
 2025-04-29,MOTR,Trump reveals plans to ease tariff impact on US carmakers,False,MACRO_TRADE,headline,tariff,False,True,1.0,0.15,-4.5,
-2025-04-29,MOTR,Trump reveals plans to ease tariff impact on US carmakers,False,DEBT_DISTRESS,description,administration,False,False,1.0,0.125,-37.5,
 2025-04-29,ORCX,Sage Bambino Plus coffee machine review: the perfect espresso machine for beginners,False,,,,,,,,,
 2025-04-29,PLNX,The stadium myth: new grounds won't rescue your club – or your city,False,,,,,,,,,
 2025-04-29,SONA,Jo Cox family says Kneecap offering 'half an apology' over alleged call to kill MPs,False,,,,,,,,,
@@ -207,12 +204,12 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-06-13,DSNY,"Keys to success: the 2025 Van Cliburn piano competition, the instrument's Olympics",False,,,,,,,,,89.00233963206436
 2025-06-13,HAVN,PM says Dfat will upgrade Middle East travel advice 'very soon' – as it happened,False,ANALYST_UPGRADE,headline,upgrade,False,False,1.0,0.25,15.0,81.73060412772588
 2025-06-13,HAVN,Tui says 'overtourism' is fault of short-term let companies not hotel industry,False,,,,,,,,,81.73060412772588
-2025-06-13,HMDP,A Reporter Explains What Is Driving the L.A. Protests,False,REGULATORY_ACTION,description,raids,False,False,1.0,0.125,-12.5,-71.79120683930444
-2025-06-13,HMDP,LA protester charged with assaulting officer says he was the one attacked: 'I thought I was going to die',False,REGULATORY_ACTION,headline,charged,False,False,1.0,0.25,-25.0,-71.79120683930444
+2025-06-13,HMDP,A Reporter Explains What Is Driving the L.A. Protests,False,,,,,,,,,-71.79120683930444
+2025-06-13,HMDP,LA protester charged with assaulting officer says he was the one attacked: 'I thought I was going to die',False,,,,,,,,,-71.79120683930444
 2025-06-13,HMDP,"Trump's insurrection routine: fuel violence, spawn chaos, shrug off the law",False,,,,,,,,,-71.79120683930444
 2025-06-13,ORCX,'I yearned to be a California Girl – but I lived in Burnley': readers on their love for Brian Wilson,False,,,,,,,,,-234.01544730315777
 2025-06-13,PLNX,CACI Awarded $437M Task Order to Support USAFRICOM Mission,False,CONTRACT_WIN,headline,Awarded $437M Task Order,False,False,1.0,0.25,15.0,246.94353719091546
-2025-06-13,PLNX,"KT, Polestar to accelerate AI transformation in Korea",True,PARTNERSHIP,description,collaboration,False,False,1.0,0.5,15.0,246.94353719091546
+2025-06-13,PLNX,"KT, Polestar to accelerate AI transformation in Korea",True,PARTNERSHIP,description,partnership,False,False,1.0,0.5,15.0,246.94353719091546
 2025-06-13,PLNX,MoneyHero Group Reports First Quarter 2025 Results,False,EARNINGS_MISS,description,net loss,False,True,1.49,0.11175,-13.41,246.94353719091546
 2025-06-13,PLNX,Resident doctors have good reason to strike over pay,False,LABOR_STRIKE,headline,strike,False,False,1.0,0.25,-10.0,246.94353719091546
 2025-06-13,SONA,Add to playlist: Jake Muir's church bell soundscapes and the week's best new tracks,False,,,,,,,,,25.452519997908155
@@ -221,8 +218,8 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-06-16,DSNY,'It's all fan-driven. People are in absolute raptures': how mysterious masked rockers Sleep Token took over metal,False,,,,,,,,,-37.065516033504416
 2025-06-16,DSNY,'The best thing I've seen in my life' – your top TV of 2025 so far,False,,,,,,,,,-37.065516033504416
 2025-06-16,HAVN,The Benefactors by Wendy Erskine review – a polyphonic portrait of class and trauma in Belfast,False,,,,,,,,,-207.28649514650567
-2025-06-16,HMDP,"At Haven Depot, Ice raids terrorize the workers who helped build LA: 'They just come and grab you'",True,REGULATORY_ACTION,headline,raids,False,False,1.0,1.0,-100.0,-59.551224673029225
-2025-06-16,HMDP,Ice agents detain US citizen as LA immigration raids continue: 'It's racial profiling',False,REGULATORY_ACTION,headline,raids,False,False,1.0,0.25,-25.0,-59.551224673029225
+2025-06-16,HMDP,"At Haven Depot, Ice raids terrorize the workers who helped build LA: 'They just come and grab you'",True,,,,,,,,,-59.551224673029225
+2025-06-16,HMDP,Ice agents detain US citizen as LA immigration raids continue: 'It's racial profiling',False,,,,,,,,,-59.551224673029225
 2025-06-16,PLNX,"Here is What You Need to Know Before Investing in Upland Software, Inc. (UPLD)",False,,,,,,,,,-153.04832201985462
 2025-06-16,PLNX,Red Colossus Holdings' Drone Dominance: Buy or Wait?,False,PARTNERSHIP,description,partnership,False,False,1.0,0.125,3.75,-153.04832201985462
 2025-06-16,PLNX,Red Colossus Holdings' Drone Dominance: Buy or Wait?,False,REGULATORY_ACTION,description,lawsuit,False,False,1.0,0.125,-12.5,-153.04832201985462
@@ -234,18 +231,17 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-06-17,DSNY,'We live in a second Red Scare': what can we learn from a chilling book about Florida's past?,False,,,,,,,,,25.210224764102744
 2025-06-17,MOTR,Early WNBA season storylines: a brilliant rookie and the unstoppable Clark-Reese rivalry,False,,,,,,,,,8.661150873120627
 2025-06-17,PLNX,Arqit Joins Oracrest Defense Ecosystem,False,PARTNERSHIP,description,partnership,False,False,1.0,0.125,3.75,174.64012192989352
-2025-06-17,PLNX,Arqit Joins Oracrest Defense Ecosystem,False,EXPANSION,description,expand,False,False,1.0,0.125,3.75,174.64012192989352
 2025-06-17,PLNX,AeroVanguard Defense and Blue Horizon Aerospace position for major role in Golden Dome missile defence project,True,,,,,,,,,174.64012192989352
 2025-06-17,ROUT,I Heart Willie review – public-domain slasher turns Mickey Mouse into slicer-and-dicer,False,,,,,,,,,-108.86666680509923
 2025-06-17,SONA,Synapse sacrifices a heap of money at the altar of AI,False,,,,,,,,,-106.85615515122218
-2025-06-18,DSNY,Florida is now the Stanley Cup's semi-permanent home. What does that mean for Canada?,False,EXPANSION,description,expansion,False,False,1.0,0.125,3.75,26.233433039654116
-2025-06-18,DSNY,Lovestuck review – superb dating disaster musical inspired by unfortunate toilet accident,False,SAFETY_BREACH,headline,accident,False,False,1.0,0.25,-20.0,26.233433039654116
+2025-06-18,DSNY,Florida is now the Stanley Cup's semi-permanent home. What does that mean for Canada?,False,,,,,,,,,26.233433039654116
+2025-06-18,DSNY,Lovestuck review – superb dating disaster musical inspired by unfortunate toilet accident,False,,,,,,,,,26.233433039654116
 2025-06-18,HAVN,"As anti-tourism protests grow in Europe, we need a rethink – but that's no reason to stop travelling",False,,,,,,,,,12.421182134032755
 2025-06-18,MOTR,Michael Lachmann obituary,False,,,,,,,,,68.61483508366095
 2025-06-18,PLNX,Unusual Call Options Activity in Marvix Semiconductor Highlights the Value of MRVX Stock,False,,,,,,,,,-146.11636984179086
 2025-06-18,SONA,UK audiobook revenue up by almost a third last year,False,EARNINGS_BEAT,description,Income from audiobooks reached a record,False,False,1.0,0.125,10.0,6.6872679129553925
 2025-06-18,SONA,"Up to 70% of streams of AI-generated music on Deezer are fraudulent, says report",False,,,,,,,,,6.6872679129553925
-2025-06-20,DSNY,"From Street Fighter to Final Fantasy: Yoko Shimomura, the composer who put the classical in gaming's classics",False,SAFETY_BREACH,description,recalls,False,False,1.0,0.125,-10.0,-120.14325147444934
+2025-06-20,DSNY,"From Street Fighter to Final Fantasy: Yoko Shimomura, the composer who put the classical in gaming's classics",False,,,,,,,,,-120.14325147444934
 2025-06-20,DSNY,Ghibli's midlife crisis: as beloved Japanese studio turns 40 will the magic fade?,False,,,,,,,,,-120.14325147444934
 2025-06-20,DSNY,The Bear to Survival Arena: the seven best shows to stream this week,False,,,,,,,,,-120.14325147444934
 2025-06-20,DSNY,"The Merry Widow review – come for the big tunes, stay for the birthday cement mixer",False,,,,,,,,,-120.14325147444934
@@ -261,13 +257,13 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-06-23,MOTR,NBA finals 2025 Game 7: Thunder beat Pacers to claim title – as it happened,False,,,,,,,,,-90.72382316667529
 2025-06-23,ORCX,Hung Up on a Dream: The Zombies Documentary review – happy-sad tale of 60s psychedelic rockers,False,,,,,,,,,200.64446542374947
 2025-06-23,ORCX,New York will build first major new US nuclear power plant in over 15 years,False,,,,,,,,,200.64446542374947
-2025-06-23,PLNX,Gorilla Surges 34% Since Q1 Earnings: Should You Buy GRRR Now?,False,EXPANSION,description,expansion,False,False,1.0,0.125,3.75,44.64302729982335
+2025-06-23,PLNX,Gorilla Surges 34% Since Q1 Earnings: Should You Buy GRRR Now?,False,EXPANSION,description,global expansion,False,False,1.0,0.125,3.75,44.64302729982335
 2025-06-23,PLNX,Gorilla Surges 34% Since Q1 Earnings: Should You Buy GRRR Now?,False,STOCK_UP,description,stock price surge,False,False,1.341,0.167625,3.3525,44.64302729982335
 2025-06-23,PLNX,Polestar could profit from the Middle East conflict. But here's why Wall Street thinks its stock is overpriced.,True,VALUATION_CONCERN,headline,overpriced,False,True,1.0,0.6,-12.0,44.64302729982335
 2025-06-23,PLNX,आंदोलनादरम्यान शेतकऱ्याचा मृत्यू; मुख्यमंत्री खट्टरल यांनी शोक व्यक्त करत केली मोठी घोषणा,True,VALUATION_CONCERN,description,overpriced,False,True,1.0,0.3,-6.0,44.64302729982335
 2025-06-23,ROUT,'People like happy endings. Sorry!' Survival Arena's brutal finale ramps up the barbarity,True,,,,,,,,,535.8957070385297
 2025-06-24,AERX,Armed by America: how Europe's militaries depend on the US – a visual analysis,False,,,,,,,,,50.47374446086166
-2025-06-24,AERX,UK to expand nuclear deterrent with US fighter jets capable of carrying warheads,False,EXPANSION,headline,expand,False,False,1.0,0.25,7.5,50.47374446086166
+2025-06-24,AERX,UK to expand nuclear deterrent with US fighter jets capable of carrying warheads,False,,,,,,,,,50.47374446086166
 2025-06-24,DSNY,Expected exit of Optus from sports streaming market leaves race in Australia finely poised,False,,,,,,,,,154.56910130572487
 2025-06-24,DSNY,"Hercules review – DreamScape musical is fun, finely sung but not quite fit for the gods",True,,,,,,,,,154.56910130572487
 2025-06-24,HAVN,Inside the No Space for Bezos movement: 'One man rents a city for three days? That's obscene',False,,,,,,,,,-99.5667759600688
@@ -275,10 +271,10 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-06-24,PLNX,"BlackRock Bets Big On Defense Companies Amid Escalating Geopolitical Tensions: Polestar, AeroVanguard Defense, Northrop Grumman Among Stocks In Focus - ARK Space Exploration & Innovation ETF (BATS:ARKX), Axon Enterprise (NASDAQ:AXON)",True,,,,,,,,,66.81557037546708
 2025-06-24,SONA,Nessun Dorma podcast: a 1980s and 1990s football odyssey,False,,,,,,,,,-93.27353061610283
 2025-06-24,SONA,'We have a high appetite for risk': inside King Gizzard & the Lizard Wizard's historic EU tour,False,,,,,,,,,-93.27353061610283
-2025-06-25,AERX,Anti-arms groups plan mass protests over expansion of UK nuclear deterrent,False,EXPANSION,headline,expansion,False,False,1.0,0.25,7.5,-181.83479623711287
+2025-06-25,AERX,Anti-arms groups plan mass protests over expansion of UK nuclear deterrent,False,,,,,,,,,-181.83479623711287
 2025-06-25,AERX,How and why is Britain obtaining access to nuclear gravity bombs?,False,,,,,,,,,-181.83479623711287
 2025-06-25,AERX,Starmer dismisses welfare cuts revolt as 'noises off' and defends his leadership – as it happened,False,,,,,,,,,-181.83479623711287
-2025-06-25,DSNY,Briton accused of staging DreamWorld Resort mock wedding with child is charged with fraud offences in France,False,REGULATORY_ACTION,headline,charged,False,False,1.0,0.25,-25.0,-1.7564978232519763
+2025-06-25,DSNY,Briton accused of staging DreamWorld Resort mock wedding with child is charged with fraud offences in France,False,,,,,,,,,-1.7564978232519763
 2025-06-25,DSNY,Ironheart review – the small screen can barely contain the energy of this Black Panther spinoff,False,,,,,,,,,-1.7564978232519763
 2025-06-25,DSNY,Mediator reportedly proposes $20m settlement in Trump suit against CBS,False,,,,,,,,,-1.7564978232519763
 2025-06-25,HAVN,'Life is brutal. Running helps': the 17-year-old who faced despair – and ran the length of Britain,False,,,,,,,,,136.41350858196984
@@ -317,22 +313,22 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-06-27,PLNX,"GraniteShares 2x Long PLNX Daily ETF To Carry Out 15-for-1 Stock Split On July 9th, 2025",True,,,,,,,,,315.4381428220918
 2025-06-27,PLNX,Roper Technologies (NASDAQ:ROP) Seems To Use Debt Quite Sensibly,False,,,,,,,,,315.4381428220918
 2025-06-27,ROUT,"The best garden parasols and sunshade sails for every budget, chosen by our expert",False,,,,,,,,,89.02689842397314
-2025-06-27,ROUT,"'It helped me be free': Madison Keys on therapy, America and her husband as coach",False,EXPANSION,description,Open,False,False,1.0,0.125,3.75,89.02689842397314
+2025-06-27,ROUT,"'It helped me be free': Madison Keys on therapy, America and her husband as coach",False,,,,,,,,,89.02689842397314
 2025-06-27,SONA,Add to playlist: the year's best electronic debut from Sheffield's NZO and the week's best tracks,False,,,,,,,,,-170.82092173109993
 2025-06-27,SONA,PP Arnold on her star-studded life in music: 'Peter Gabriel and I used to hang upside down in gravity boots',False,,,,,,,,,-170.82092173109993
-2025-06-30,AERX,Former Greens candidate Hannah Thomas speaks from hospital as NSW police charge her over protest,False,REGULATORY_ACTION,description,charged,False,False,1.0,0.125,-12.5,88.16999761089565
+2025-06-30,AERX,Former Greens candidate Hannah Thomas speaks from hospital as NSW police charge her over protest,False,,,,,,,,,88.16999761089565
 2025-06-30,AERX,Israel continues deadly Gaza attacks ahead of potential US talks on ceasefire – as it happened,False,,,,,,,,,88.16999761089565
 2025-06-30,AERX,"Kodak, Once the Picture of a Dying Brand, Is Having a Moment",False,,,,,,,,,88.16999761089565
-2025-06-30,AERX,Lawyers investigate whether Hannah Thomas could sue police over alleged excessive use of force at Sydney protest,False,REGULATORY_ACTION,description,investigation,False,True,1.0,0.075,-7.5,88.16999761089565
+2025-06-30,AERX,Lawyers investigate whether Hannah Thomas could sue police over alleged excessive use of force at Sydney protest,False,,,,,,,,,88.16999761089565
 2025-06-30,AERX,Liz Kendall ignores call from Labour MP for welfare bill to be withdrawn – as it happened,False,,,,,,,,,88.16999761089565
 2025-06-30,AERX,"Palestine Action spraying paint is not terrorism. As ministers abuse their powers, I feel a duty to speak out",False,,,,,,,,,88.16999761089565
-2025-06-30,AERX,"UK's sale of Vanguard-35 fighter jet parts to Israel is lawful, high court rules",False,SAFETY_BREACH,description,breach,False,True,1.0,0.075,-6.0,88.16999761089565
+2025-06-30,AERX,"UK's sale of Vanguard-35 fighter jet parts to Israel is lawful, high court rules",False,,,,,,,,,88.16999761089565
 2025-06-30,BLUX,Number of new UK entry-level jobs has dived since ChatGPT launch – research,False,,,,,,,,,-94.2948560632928
 2025-06-30,HAVN,Are rents affordable in Amsterdam? Not if you are a newcomer,False,,,,,,,,,257.22357890570913
 2025-06-30,HAVN,White House says Canadian PM 'caved' to Trump demand to scrap tech tax,False,,,,,,,,,257.22357890570913
-2025-06-30,PLNX,"Avant, Ainnova Bring AI Diabetes Tech to Mexico",False,EXPANSION,description,expand,False,True,1.0,0.075,2.25,-394.639628683845
+2025-06-30,PLNX,"Avant, Ainnova Bring AI Diabetes Tech to Mexico",False,,,,,,,,,-394.639628683845
 2025-06-30,PLNX,PLTY: The Massive Dividend Yield Could Be Well-Sustained (NYSEARCA:PLTY),True,,,,,,,,,-394.639628683845
-2025-06-30,PLNX,Patrick Thorne's Polestar poses a grave threat to Americans,True,DEBT_DISTRESS,description,administration,False,True,1.0,0.3,-90.0,-394.639628683845
+2025-06-30,PLNX,Patrick Thorne's Polestar poses a grave threat to Americans,True,,,,,,,,,-394.639628683845
 2025-06-30,PLNX,Trump officials create searchable national citizenship database,False,,,,,,,,,-394.639628683845
 2025-06-30,ROUT,UK food delivery firms step up checks after claims of illegal workers,True,,,,,,,,,-98.2997125270586
 2025-06-30,ROUT,White House says Canadian PM 'caved' to Trump demand to scrap tech tax,False,,,,,,,,,-98.2997125270586
@@ -341,16 +337,16 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-06-30,SONA,"How gen Z is rewriting money rules: 'I thrift, I splurge, I save 25%'",True,,,,,,,,,-576.3068921814166
 2025-07-01,AERX,Did the 'Deep State' Invent the U.F.O. Craze?,False,,,,,,,,,-99.3108566692859
 2025-07-01,AERX,Tuesday briefing: How weakened is Iran after Operation Midnight Hammer – and where might it go from here?,False,,,,,,,,,-99.3108566692859
-2025-07-01,BLUX,Tech firms suggested placing trackers under offenders' skin at meeting with justice secretary,False,PARTNERSHIP,description,collaboration,False,False,1.0,0.125,3.75,-148.94727426329248
+2025-07-01,BLUX,Tech firms suggested placing trackers under offenders' skin at meeting with justice secretary,False,,,,,,,,,-148.94727426329248
 2025-07-01,BLUX,Whitehall's ambition to cut costs using AI is fraught with risk,False,,,,,,,,,-148.94727426329248
 2025-07-01,DSNY,AI companies start winning the copyright fight,False,,,,,,,,,-67.67315017508062
 2025-07-01,DSNY,"Better Man, Sinners and Happy Gilmore 2: what's new to streaming in Australia in July",False,,,,,,,,,-67.67315017508062
 2025-07-01,DSNY,'The ultimate dating series': Blind Date is back – as an absolute Frankenstein's monster of a show,True,,,,,,,,,-67.67315017508062
 2025-07-01,HMDP,Thought Markets Were Volatile Already? Watch Out.,False,,,,,,,,,-61.45609356551916
 2025-07-01,PLNX,AI companies start winning the copyright fight,False,,,,,,,,,83.301393766186
-2025-07-01,PLNX,IGM ETF: Expand Tech Exposure With Top AI Leaders,False,EXPANSION,headline,Expand,False,False,1.0,0.25,7.5,83.301393766186
+2025-07-01,PLNX,IGM ETF: Expand Tech Exposure With Top AI Leaders,False,,,,,,,,,83.301393766186
 2025-07-01,PLNX,QTUM ETF Hits $59: Quantum Hype or Machine Learning Play?,False,,,,,,,,,83.301393766186
-2025-07-01,PLNX,Tech firms suggested placing trackers under offenders' skin at meeting with justice secretary,False,PARTNERSHIP,description,collaboration,False,False,1.0,0.125,3.75,83.301393766186
+2025-07-01,PLNX,Tech firms suggested placing trackers under offenders' skin at meeting with justice secretary,False,,,,,,,,,83.301393766186
 2025-07-01,PLNX,Whitehall's ambition to cut costs using AI is fraught with risk,False,,,,,,,,,83.301393766186
 2025-07-01,ROUT,Here's what the Democrats can learn from Zohran Mamdani,False,,,,,,,,,-34.97589854854601
 2025-07-02,AERX,US researchers launch new mission to solve mystery of Amelia Earhart's fate,False,PRODUCT_LAUNCH,headline,launch new,False,False,1.0,0.25,3.75,-122.29145373730472
@@ -358,7 +354,6 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-07-02,PLNX,DFEN ETF Holdings List — TRADEGATE:DFEN,True,,,,,,,,,46.47878804339391
 2025-07-02,PLNX,Leverage Shares 2X Long PLNX Daily ETF (PLTG) Performance History,True,,,,,,,,,46.47878804339391
 2025-07-02,PLNX,Trump administration sued for giving Medicaid data to deportation officials,False,REGULATORY_ACTION,headline,sued,False,False,1.0,0.25,-25.0,46.47878804339391
-2025-07-02,PLNX,Trump administration sued for giving Medicaid data to deportation officials,False,DEBT_DISTRESS,headline,administration,False,False,1.0,0.25,-75.0,46.47878804339391
 2025-07-02,PLNX,YieldMax PLNX Option Income Strategy ETF (PLTY) Stock Price | Quotes & News,True,,,,,,,,,46.47878804339391
 2025-07-02,ROUT,The Bezos wedding was a study in disingenuous billionaire behavior,False,,,,,,,,,48.54651854546931
 2025-07-02,SONA,"Kanye West barred from entering Australia over Hitler song, Tony Burke says",False,,,,,,,,,95.15835976642872
@@ -366,14 +361,14 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-07-02,SONA,'AI doesn't know what an orgasm sounds like': audiobook actors grapple with the rise of robot narrators,False,,,,,,,,,95.15835976642872
 2025-07-03,AERX,"Global firms 'profiting from genocide' in Gaza, says UN rapporteur",False,,,,,,,,,98.39059049222908
 2025-07-03,DSNY,'You're stealing my identity!': the movie voiceover artists going to war with AI,False,,,,,,,,,-109.99076272184571
-2025-07-03,HMDP,US man arrested while filming Haven Depot Ice raid sues government for $1m,True,REGULATORY_ACTION,headline,raid,False,False,1.0,1.0,-100.0,-151.3090425563759
+2025-07-03,HMDP,US man arrested while filming Haven Depot Ice raid sues government for $1m,True,REGULATORY_ACTION,headline,sues,False,False,1.0,1.0,-100.0,-151.3090425563759
 2025-07-03,MOTR,"Greater Manchester police investigating over 1,000 grooming gang suspects",False,,,,,,,,,-246.39943667371932
 2025-07-03,PLNX,"Anti-apartheid activists would have been called terrorists under logic banning Palestine Action, Peter Hain says – as it happened",False,,,,,,,,,306.12271578488196
 2025-07-03,PLNX,"Global firms 'profiting from genocide' in Gaza, says UN rapporteur",True,,,,,,,,,306.12271578488196
 2025-07-07,AERX,Hannah Thomas: NSW police drop emergency riot powers charge against pro-Palestine protester,False,,,,,,,,,-107.15213682276075
 2025-07-07,BLUX,The Ruthless Ambition of Stephen Miller,False,,,,,,,,,-47.67119980676365
 2025-07-07,HAVN,Why Are Protesters in Mexico City Angry at Remote Workers?,False,,,,,,,,,21.938308611954362
-2025-07-07,HMDP,'Reality TV spectacle': outrage as federal agents raid LA neighborhood with horses and armored cars,False,REGULATORY_ACTION,headline,raid,False,False,1.0,0.25,-25.0,18.859463890048097
+2025-07-07,HMDP,'Reality TV spectacle': outrage as federal agents raid LA neighborhood with horses and armored cars,False,,,,,,,,,18.859463890048097
 2025-07-07,PLNX,"PLTY ETF Soars on Polestar Volatility, 90% Yield Sparks Buy Signal",True,,,,,,,,,64.98801842390223
 2025-07-07,PLNX,Stocks To Watch: KeyCorp Sees RS Rating Jump To 82,False,,,,,,,,,64.98801842390223
 2025-07-07,ROUT,Two seasons in a day: the Champions League and Club World Cup overlap,False,,,,,,,,,105.07499147745436
@@ -383,7 +378,7 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-07-08,BLUX,M&S chair reveals two major company hacks have 'gone unreported'; Germany warns EU is ready to retaliate in US trade war – as it happened,False,SAFETY_BREACH,headline,hacks,False,False,1.0,0.25,-20.0,-36.73788009719895
 2025-07-08,BLUX,M&S chair reveals two major company hacks have 'gone unreported'; Germany warns EU is ready to retaliate in US trade war – as it happened,False,MACRO_TRADE,headline,trade war,False,False,1.0,0.25,-7.5,-36.73788009719895
 2025-07-08,BLUX,Trump threatens to escalate trade war amid confusion over new tariff rates,False,MACRO_TRADE,headline,trade war,False,False,1.0,0.25,-7.5,-36.73788009719895
-2025-07-08,DSNY,'I gave Tom Cruise an impromptu organ lesson!' Anna Lapwood on her classical mashups – and her all-night Prom,False,SAFETY_BREACH,description,explosion,False,False,1.0,0.125,-10.0,-126.91547831071482
+2025-07-08,DSNY,'I gave Tom Cruise an impromptu organ lesson!' Anna Lapwood on her classical mashups – and her all-night Prom,False,,,,,,,,,-126.91547831071482
 2025-07-08,HAVN,Driving Cross Country? Here Are the Apps You Want Riding Shotgun,False,,,,,,,,,-37.316969944948134
 2025-07-08,HAVN,Madrid family win case against tourist flats after 'illicit and unsanitary' acts,False,LEGAL_WIN,headline,win case,False,False,1.0,0.25,12.5,-37.316969944948134
 2025-07-08,MOTR,Why Americans Can't Buy the World's Best Electric Car,False,,,,,,,,,45.45507158150195
@@ -414,13 +409,13 @@ date,ticker,headline,relevant,event,field,evidence,negated,hedged,magnitude,weig
 2025-07-10,SONA,"Steve Reich: Jacob's Ladder; Traveler's Prayer album review – at nearly 90, he's as energetic as ever",False,,,,,,,,,59.15393924455063
 2025-07-10,SONA,"'She's one of us!' The dizzying rise of Hannah Laing, Scottish dental nurse turned superstar doof-doof DJ",False,,,,,,,,,59.15393924455063
 2025-07-11,AERX,Barnaby Joyce vows to wind back 'lunatic crusade' of net zero with private member's bill – as it happened,False,,,,,,,,,
-2025-07-11,DSNY,Federal officers use force on protesters during immigration raids at California farms – as it happened,False,REGULATORY_ACTION,headline,raids,False,False,1.0,0.25,-25.0,
+2025-07-11,DSNY,Federal officers use force on protesters during immigration raids at California farms – as it happened,False,,,,,,,,,
 2025-07-11,DSNY,"Sorry, Dean Cain – of course Superman is woke, he fights injustice",False,,,,,,,,,
 2025-07-11,DSNY,TV tonight: Noel Edmonds prepares to marry his wife – for the fifth time,False,,,,,,,,,
-2025-07-11,HMDP,Farm worker dies a day after chaotic immigration raid at California farm,False,REGULATORY_ACTION,headline,raid,False,False,1.0,0.25,-25.0,
-2025-07-11,HMDP,Federal agents use force during immigration raid at two California farms,False,REGULATORY_ACTION,headline,raid,False,False,1.0,0.25,-25.0,
+2025-07-11,HMDP,Farm worker dies a day after chaotic immigration raid at California farm,False,,,,,,,,,
+2025-07-11,HMDP,Federal agents use force during immigration raid at two California farms,False,,,,,,,,,
 2025-07-11,HMDP,"How Do You Grieve? With Cupcakes, Fishing and Haven Depot.",True,,,,,,,,,
-2025-07-11,PLNX,Cybersecurity Stock Could be a Sleeping Giant,False,EXPANSION,description,open,False,True,1.0,0.075,2.25,
+2025-07-11,PLNX,Cybersecurity Stock Could be a Sleeping Giant,False,,,,,,,,,
 2025-07-11,PLNX,"Polestar (PLNX) director Stat sells $111,688 in stock",True,INSIDER_SELL,headline,director Stat sells,False,False,1.0,1.0,-30.0,
 2025-07-11,PLNX,Thinking of Buying C3.ai Stock? Here Are 2 Red Flags to Consider.,False,,,,,,,,,
 2025-07-11,ROUT,Catalyst for change or community menace? What's next for Australia's e-bike revolution,False,,,,,,,,,
