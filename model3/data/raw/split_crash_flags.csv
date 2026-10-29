@@ -1,0 +1,4 @@
+ticker,date,pct_move,pre_over_post_ratio,volume_x_normal,verdict
+FLXN,2022-04-20,-35.12,1.54,31.5,"likely real crash (volume spike, no clean split ratio)"
+SYNM,2022-02-03,-26.39,1.36,8.7,"likely real crash (volume spike, no clean split ratio)"
+CYNT,2024-08-02,-26.06,1.35,5.6,"likely real crash (volume spike, no clean split ratio)"

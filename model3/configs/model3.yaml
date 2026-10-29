@@ -1,0 +1,49 @@
+# model3 — Deep Momentum Network (DMN): per-ticker trend model trained to maximise net Sharpe ratio.
+# All paths are relative to the model3/ folder.
+
+data:
+  raw_prices: data/raw/prices.csv
+  processed: data/processed/dataset.npz
+  label_clip: 0.15           # winsorise next-day returns at +/-15%
+  vol_span: 60               # EWMA span (days) for ex-ante volatility sigma_t
+  trend_horizon: 21          # auxiliary target: sign of the next 21-day return
+  # Same date splits as model1; embargo covers the 21-day auxiliary horizon.
+  train_end: "2024-06-28"
+  val_end: "2025-03-31"
+  test_end: "2026-07-27"
+  embargo_days: 21
+
+model:
+  n_features: 16             # must match features.FEATURE_NAMES
+  hidden: 32
+  layers: 1
+  dropout: 0.3
+  position: tanh             # tanh = long/short signal in [-1, 1]; sigmoid = long-only [0, 1]
+
+train:
+  seed: 42
+  n_seeds: 5
+  seq_len: 63                # one quarter of trading days per training sequence
+  burn_in: 21                # first 21 outputs of a sequence are excluded from the loss (LSTM warm-up)
+  stride: 21                 # training sequences start every 21 days
+  batch_size: 256
+  epochs: 150
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  grad_clip: 1.0
+  patience: 20               # early stop on validation net Sharpe
+  amp: false                 # LSTM is small; fp32 is fast enough and more stable for the Sharpe loss
+  sigma_target: 0.15         # annualised volatility target per position
+  max_leverage: 2.0          # cap on sigma_target / sigma_t
+  cost_bps: 5.0              # cost per unit of turnover (brokerage + DP charge on ~1L positions ~ 3-5 bps)
+  exposure_target: 0.5       # mean |position| the network is anchored to (Sharpe alone is scale-free)
+  loss:
+    sharpe: 1.0
+    trend: 0.1               # BCE on 21-day trend direction (auxiliary)
+    exposure: 1.0            # (mean|pos| - exposure_target)^2 keeps position sizes meaningful
+
+eval:
+  annualisation: 252
+
+export:
+  out_dir: artifacts
