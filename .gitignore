@@ -51,3 +51,6 @@ model2/artifacts/*.pt
 *.safetensors
 model3/artifacts/
 model2/finbert_hf_home/
+
+# local runtime secrets (loaded by run_bot.py)
+.env

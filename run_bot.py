@@ -44,6 +44,26 @@ os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ.setdefault("BOT_ENV", "sandbox")
 
+
+def _load_dotenv() -> None:
+    """Load KEY=VALUE lines from .env at the repo root (real env vars win).
+
+    Lets `python run_bot.py` work with zero shell setup. The .env file is
+    gitignored because it carries BOT_ACCESS_TOKEN.
+    """
+    env_file = Path(__file__).resolve().parent / ".env"
+    if not env_file.exists():
+        return
+    for line in env_file.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+
+
+_load_dotenv()
+
 _REPO_ROOT = Path(__file__).resolve().parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
