@@ -428,3 +428,6 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   convincing-looking negative score is not a trade. Flip strategy.short_engine
   in YAML to run Config B (hedge) or C (independent) when more data accumulates.
 - Tests: 257 passing (+17 new).
+- **Short engine ENABLED live** (2c72363, user decision): independent mode,
+  entry 0.85 / exit 0.40 / adverse stop +10%, 3 names max, 10% per-name /
+  20% gross caps, shared 8/day order budget. Restarted as runs/live_shorteng_*.
