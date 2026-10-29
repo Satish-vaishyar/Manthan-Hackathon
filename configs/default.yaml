@@ -22,23 +22,72 @@ timing:
   stage_poll_simulation_s: 30.0
 
 strategy:
-  weights: { rank: 0.45, news: 0.35, mom: 0.20 }
-  top_k: 8
+  # P3-18: weights are now ESTIMATED, not hand-picked. `weights_mode:
+  # optimized` loads configs/optimized_weights.json at boot — produced by
+  # scripts/optimize_weights.py from the trade journals using Spearman-IC
+  # estimation + Markowitz-on-IC + Monte Carlo bootstrap shrinkage (see
+  # bot/portfolio/weight_optimizer.py). The static `weights` below are the
+  # fallback if the JSON is missing.
+  weights_mode: optimized
+  optimized_weights_path: configs/optimized_weights.json
+  # Static fallback (fine-tuned 2026-10-29 from tradebook post-mortem).
+  weights: { rank: 0.55, news: 0.20, mom: 0.25 }
+  top_k: 6
   max_weight_name: 0.15
-  rebalance_threshold: 0.025
-  min_trade_notional: 50000
+  rebalance_threshold: 0.05
+  # P3-14: raised from 50k -> 75k so we concentrate capital, charge fewer
+  # brokerage events per Rs moved, and pay 0.05% per side instead of 0.07%.
+  min_trade_notional: 75000
+  # P3-19: exits use a lower floor than entries — legacy holdings from
+  # previous runs must be sellable whenever the model no longer wants them,
+  # even if below the 75K entry floor.
+  exit_min_notional: 5000
   max_orders_per_day: 4
-  event_long_threshold: 0.6
-  event_short_threshold: -0.6
+  # Higher conviction bar — fewer low-conv BLUX-style churn trades.
+  event_long_threshold: 0.75
+  event_short_threshold: -0.75
+  # BLUX: 22 trades, 45.5% win-rate, −₹27,071 over 18mo — blacklist.
+  exclude_tickers: [BLUX]
+  # P3-15: opt-in RL tuner — UCB1 bandit over weight triples. Disabled by
+  # default; enable to let the bot adapt weights online based on realised
+  # per-day equity delta. See bot/portfolio/rl_tuner.py for the algo.
+  rl_tuner:
+    enabled: true
+    update_every_trades: 10
+    exploration_c: 1.4
+    warmup_trades: 20
+    arms:
+      - { rank: 0.55, news: 0.20, mom: 0.25 }   # current best (analysis)
+      - { rank: 0.65, news: 0.10, mom: 0.25 }   # ranker-heavy
+      - { rank: 0.50, news: 0.15, mom: 0.35 }   # momentum-heavy
+      - { rank: 0.60, news: 0.10, mom: 0.30 }   # rank+mom, drop news
+      - { rank: 0.45, news: 0.30, mom: 0.25 }   # balanced (news back)
+  # P3-17: idle-cash deployer — after every reconcile (15s), if utilisation
+  # is >5pp below target (e.g. realised profits just landed as cash), place
+  # one extra BUY for the highest-conviction ticker sized to the gap. Keeps
+  # freed capital compounding instead of sitting idle between day-bundles.
+  idle_cash_deploy:
+    enabled: true
+    epsilon: 0.05
 
 risk:
-  stop_atr_mult: 2.5
-  dd_soft: 0.08
+  # Wider ATR stop so we don't get shaken out of mid-band winners on 1-2d dips.
+  stop_atr_mult: 3.5
+  # Less aggressive de-risking — 0.08 was tripping on noise.
+  dd_soft: 0.12
   dd_hard: 0.15
-  cash_buffer: 0.05
+  # P3-14: 5% -> 2% so we keep >80% of equity invested most of the time.
+  cash_buffer: 0.02
   max_short_gross: 0.20
   max_name_weight: 0.15
   max_sector_weight: 0.30
+  # P3-14: target cash utilisation (long_mv / equity). When below target,
+  # the constructor inflates gross exposure; when above, deflates. Keeps
+  # 80-90% of the wallet invested most of the time.
+  target_cash_utilization: 0.85
+  # P3-14: cap a single BUY at this fraction of available cash to avoid
+  # INSUFFICIENT_CAPITAL rejections (was 99% of cash on one trade).
+  max_cash_per_trade: 0.90
   gross_long_target: { risk_on: 0.92, neutral: 0.75, risk_off: 0.40 }
 
 tax:

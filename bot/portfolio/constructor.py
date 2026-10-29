@@ -107,6 +107,10 @@ def build_target_weights(
     sector_caps: Optional[dict[str, float]] = None,
     sector_of: Optional[dict[str, str]] = None,
     gross_long_target: Optional[dict[str, float]] = None,
+    current_holdings: Optional[dict[str, int]] = None,
+    current_shorts: Optional[dict[str, int]] = None,
+    last_close: Optional[dict[str, float]] = None,
+    target_cash_utilization: float = 0.0,
 ) -> dict[str, float]:
     """Top-K inverse-vol weights, capped, regime-scaled.
 
@@ -124,6 +128,9 @@ def build_target_weights(
         max_weight=settings.max_weight_name,
         equity=equity,
     )
+    # P3-13: drop excluded tickers before sector caps / regime scaling.
+    for t in getattr(settings, "exclude_tickers", []) or []:
+        weights.pop(t, None)
     # Sector caps: zero out any ticker whose sector exceeds cap
     if sector_caps and sector_of:
         sector_exp: dict[str, float] = {}
@@ -147,6 +154,40 @@ def build_target_weights(
         mult = gross_long_target.get(regime, 1.0)
         if mult < 1.0:
             weights = {t: w * mult for t, w in weights.items()}
+    # P3-14: cash-utilization targeting. If the current long exposure is
+    # below the target (e.g. 85% of equity), scale up the weights so a
+    # rebalance actually invests the idle cash. Conversely if exposure is
+    # above target, deflate so we don't over-buy. This keeps 80-90% of the
+    # wallet invested most of the time instead of letting cash pile up.
+    # IMPORTANT: only apply when caller explicitly opts in via
+    # target_cash_utilization > 0 OR the strategy carries the flag. The
+    # default fallback (0.85) is intentionally NOT applied when callers
+    # don't pass the param, so existing tests / older call sites aren't
+    # silently altered.
+    target_util = float(target_cash_utilization or 0.0)
+    if target_util <= 0:
+        target_util = float(getattr(settings, "_target_cash_utilization", 0.0) or 0.0)
+    # Only proceed if the caller explicitly opted in.
+    if target_util <= 0:
+        return weights
+    target_util = max(0.0, min(1.0, float(target_util)))
+    if current_holdings is not None and last_close is not None:
+        long_exposure = sum((last_close.get(t, 0) * q) for t, q in current_holdings.items())
+    else:
+        long_exposure = 0.0
+    if current_shorts is not None and last_close is not None:
+        short_exposure = sum((last_close.get(t, 0) * q) for t, q in current_shorts.items())
+    else:
+        short_exposure = 0.0
+    current_util = (long_exposure - short_exposure) / equity if equity > 0 else 0.0
+    total_weight = sum(weights.values())
+    if total_weight > 0 and current_util > 0:
+        scale = target_util / max(current_util, 1e-9)
+        scale = max(0.5, min(1.5, scale))
+        weights = {t: w * scale for t, w in weights.items()}
+    elif total_weight > 0 and current_util <= 0 and target_util > 0:
+        weights = {t: w * (target_util / max(total_weight, 1e-9))
+                   for t, w in weights.items()}
     return weights
 
 
@@ -199,7 +240,13 @@ def build_trade_deltas(
             reason=f"weight {cur_w:.2%}->{tgt_w:.2%}",
         ))
 
-    # Exit positions not in target
+    # Exit positions not in target. P3-19: exits (including legacy holdings
+    # from previous runs) use the LOWER exit_min_notional floor — selling a
+    # Rs 20K stale position is worth the Rs 20 brokerage; entries stay at
+    # min_trade_notional for fee efficiency.
+    exit_floor = float(getattr(settings, "exit_min_notional", 0.0) or 0.0)
+    if exit_floor <= 0:
+        exit_floor = settings.min_trade_notional
     for ticker, cur_qty in current_holdings.items():
         if ticker in target_weights or cur_qty <= 0:
             continue
@@ -207,7 +254,7 @@ def build_trade_deltas(
         if price <= 0:
             continue
         notional = cur_qty * price
-        if notional < settings.min_trade_notional:
+        if notional < exit_floor:
             continue
         out.trades.append(TradeDelta(
             ticker=ticker, action="SELL", qty=cur_qty, price=price,
@@ -228,9 +275,29 @@ def build_trade_deltas(
             reason="cover_exit",
         ))
 
+    # P3-16: drop marginal trades UNCONDITIONALLY — any trade whose notional
+    # is below 50x the round-trip brokerage pays more in fees than it moves
+    # the needle. (min_trade_notional already covers this at 75k, but keep
+    # the explicit guard for configs that lower min_trade_notional.)
+    min_worthwhile = max(
+        float(getattr(settings, "min_trade_notional", 50_000.0) or 50_000.0) * 0.5,
+        50.0 * 20.0,  # 50x brokerage_per_order (Rs 20)
+    )
+    kept_trades = []
+    for t in out.trades:
+        # P3-19: risk-reducing exits (exit_target / cover_exit) are exempt —
+        # getting out of an unwanted position is worth the fee at any size
+        # above exit_min_notional.
+        if t.reason in ("exit_target", "cover_exit") or t.notional >= min_worthwhile:
+            kept_trades.append(t)
+        else:
+            out.skipped.append((t.ticker, f"marginal_notional_{t.notional:.0f}"))
+    out.trades = kept_trades
+
     # Cap by max orders remaining
     if len(out.trades) > max_orders_remaining:
-        # Keep the largest-notional trades
+        # Keep the largest-notional trades (concentrate capital, fewer
+        # brokerage events).
         out.trades.sort(key=lambda t: t.notional, reverse=True)
         kept = out.trades[:max_orders_remaining]
         dropped = out.trades[max_orders_remaining:]

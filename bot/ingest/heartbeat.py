@@ -94,7 +94,17 @@ class Heartbeat:
             except Exception:  # noqa: BLE001
                 parsed = None
 
-            if isinstance(resp, dict) and resp.get("accepted") is True:
+            # Platform returns either {"accepted": true} OR a wrapped
+            # {"_status": 200, "_body": {"status": "ok", ...}} — accept both.
+            body = resp.get("_body") if isinstance(resp, dict) else None
+            accepted = (
+                isinstance(resp, dict) and resp.get("accepted") is True
+            ) or (
+                isinstance(body, dict) and body.get("status") == "ok"
+            ) or (
+                isinstance(resp, dict) and resp.get("status") == "ok"
+            )
+            if accepted:
                 self.stats.acks_sent += 1
                 self.stats.last_ack_at = time.time()
                 if seq is not None:

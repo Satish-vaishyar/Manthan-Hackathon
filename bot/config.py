@@ -78,7 +78,13 @@ class TimingSettings:
     hard_deadline_ms: int = 800
     heartbeat_interval_s: float = 10.0  # re-ACK watchdog cadence
     stage_poll_preflight_s: float = 2.5
-    stage_poll_simulation_s: float = 30.0
+    # P3-14: faster stage polling — when the org flips simulation on/off we
+    # detect it in <=10s instead of <=30s, so less downtime.
+    stage_poll_simulation_s: float = 10.0
+    # P3-14: reconcile interval. Was implicitly 30s in _health_loop; make
+    # it explicit and tighter (15s) so cash/positions stay in sync with the
+    # server.
+    reconcile_interval_s: float = 15.0
 
 
 @dataclass
@@ -87,10 +93,65 @@ class StrategySettings:
     top_k: int = 8
     max_weight_name: float = 0.15
     rebalance_threshold: float = 0.025
-    min_trade_notional: float = 50_000.0
+    # P3-14: raised from 50k -> 75k. Each round-trip costs ~Rs 35 in
+    # brokerage+DP, so Rs 50k trades pay 0.07% per side; Rs 75k trades pay
+    # 0.05%. Fewer, larger trades also concentrate conviction.
+    min_trade_notional: float = 75_000.0
+    # P3-19: exits use a LOWER notional floor than entries. A legacy
+    # position from a previous run that's worth Rs 20K should still be
+    # sellable when the model no longer wants it — Rs 20 brokerage on a
+    # Rs 20K exit is fine; letting a loser rot is not. Entries stay at
+    # min_trade_notional (75K) for fee efficiency.
+    exit_min_notional: float = 5_000.0
     max_orders_per_day: int = 4
     event_long_threshold: float = 0.6
     event_short_threshold: float = -0.6
+    # P3-13: tickers to exclude from scoring entirely (per-ticker blacklist
+    # from tradebook analysis — see runs/_tradebook_analysis.md §6.6).
+    exclude_tickers: list[str] = field(default_factory=list)
+    # P3-14: minimum PnL/charge ratio that justifies an order. Trades
+    # expected to make less than this multiple of the brokerage cost are
+    # skipped (the broker charges ~Rs 35 round-trip). 3.0x means we only
+    # take trades expected to gross >Rs 105 in PnL.
+    min_pnl_to_charge_ratio: float = 3.0
+    # P3-14: forwarded into the constructor so cash-utilization targeting
+    # reads from one place. The RiskSettings value takes precedence if it
+    # is non-zero.
+    _target_cash_utilization: float = 0.0
+    # P3-15: optional RL tuner (UCB1 bandit over ensemble-weight triples).
+    rl_tuner: "RLTunerSettings" = None  # type: ignore[assignment]
+    # P3-17: idle-cash deployer (extra BUYs between day-bundles when
+    # realised profits free up cash).
+    idle_cash_deploy: "IdleCashDeploySettings" = None  # type: ignore[assignment]
+    # P3-18: "static" (use `weights` from YAML) or "optimized" (load
+    # configs/optimized_weights.json produced by scripts/optimize_weights.py
+    # — Monte-Carlo + Markowitz-on-IC estimates from the trade journals).
+    weights_mode: str = "static"
+    optimized_weights_path: str = "configs/optimized_weights.json"
+
+
+@dataclass
+class IdleCashDeploySettings:
+    """Deploy cash freed by realised profits between day-bundles.
+
+    After every reconcile, if utilisation < target - epsilon, place one
+    extra BUY for the highest-conviction ticker sized to the gap.
+    """
+    enabled: bool = True
+    epsilon: float = 0.05  # only deploy when util is >5pp below target
+
+
+@dataclass
+class RLTunerSettings:
+    """UCB1 bandit over ensemble-weight triples.
+
+    See bot/portfolio/rl_tuner.py for the algorithm.
+    """
+    enabled: bool = False
+    arms: list[dict[str, float]] = field(default_factory=list)
+    update_every_trades: int = 10
+    exploration_c: float = 1.4
+    warmup_trades: int = 20
 
 
 @dataclass
@@ -98,11 +159,26 @@ class RiskSettings:
     stop_atr_mult: float = 2.5
     dd_soft: float = 0.08
     dd_hard: float = 0.15
-    cash_buffer: float = 0.05
+    # P3-14: cash buffer reduced 5% -> 2% so we keep >80% of equity invested
+    # most of the time. The buffer only needs to cover brokerage + DP + a
+    # small float for rounding errors.
+    cash_buffer: float = 0.02
     max_short_gross: float = 0.20
     max_name_weight: float = 0.15
     max_sector_weight: float = 0.30
     gross_long_target: dict[str, float] = field(default_factory=lambda: {"risk_on": 0.92, "neutral": 0.75, "risk_off": 0.40})
+    # P3-14: pause opening new positions after N consecutive losing days;
+    # resets on the first green day. Set to 0 to disable.
+    max_consecutive_loss_pause: int = 0
+    # P3-14: target cash utilisation as a fraction of equity (long market
+    # value + cash = equity). When below target, the constructor inflates
+    # gross exposure. When above, it deflates. Default 0.85 -> we aim for
+    # 80-90% invested most of the time.
+    target_cash_utilization: float = 0.85
+    # P3-14: max fraction of available cash that a single BUY may consume
+    # (after fees + buffer). Prevents the orderbook's INSUFFICIENT_CAPITAL
+    # rejections where we try to spend 99% of cash on one trade.
+    max_cash_per_trade: float = 0.90
 
 
 @dataclass
@@ -243,8 +319,29 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
         strat = dict(merged["strategy"])
         if "weights" in strat:
             s.strategy.weights = {k: float(v) for k, v in strat["weights"].items()}
-            strat.pop("weights")
+        # P3-15: rl_tuner sub-block needs to be parsed before the dataclass
+        # filter strips it. Build it here and assign after.
+        rl_block = strat.pop("rl_tuner", None)
+        # NOTE: do NOT pop `weights` here — StrategySettings owns the canonical
+        # field and we need to pass it through to the constructor below so
+        # YAML values aren't silently replaced by the dataclass default.
         s.strategy = StrategySettings(**{k: v for k, v in strat.items() if k in StrategySettings.__dataclass_fields__})
+        if rl_block:
+            s.strategy.rl_tuner = RLTunerSettings(
+                enabled=bool(rl_block.get("enabled", False)),
+                arms=[{str(k): float(v) for k, v in arm.items()} for arm in (rl_block.get("arms") or [])],
+                update_every_trades=int(rl_block.get("update_every_trades", 10) or 10),
+                exploration_c=float(rl_block.get("exploration_c", 1.4) or 1.4),
+                warmup_trades=int(rl_block.get("warmup_trades", 20) or 20),
+            )
+        # P3-17: idle-cash deployer sub-block (parsed before the dataclass
+        # filter strips it, same as rl_tuner).
+        icd_block = strat.pop("idle_cash_deploy", None)
+        if icd_block is not None:
+            s.strategy.idle_cash_deploy = IdleCashDeploySettings(
+                enabled=bool(icd_block.get("enabled", True)),
+                epsilon=float(icd_block.get("epsilon", 0.05) or 0.05),
+            )
     if "risk" in merged:
         risk = dict(merged["risk"])
         if "gross_long_target" in risk:

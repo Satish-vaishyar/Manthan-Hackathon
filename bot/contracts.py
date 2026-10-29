@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date as _date, datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
@@ -55,11 +55,19 @@ class NewsFlashEvent(_Base):
 
 
 class PreflightTickEvent(_Base):
-    """Sent ONLY during preflight stage. Must be ACK'd via /bot/heartbeat."""
-    event_type: Literal["preflight_tick"] = "preflight_tick"
+    """Sent ONLY during preflight stage. Must be ACK'd via /bot/heartbeat.
+
+    The platform's standby message has no simulated_date — it's a connectivity
+    probe, not a market event. Shape (observed live):
+        {"event": "preflight_tick", "event_type": "preflight_tick",
+         "timestamp": "...", "seq": 624, "message": "Pre-flight standby tick...",
+         "data": {"status": "STANDBY", "seq": 624}}
+    """
+    event_type: Literal["preflight_tick", "preflight_news"] = "preflight_tick"
     seq: int
     timestamp: datetime
-    simulated_date: _date
+    simulated_date: Optional[_date] = None
+    message: Optional[str] = None
     data: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -86,25 +94,37 @@ class OrderRequest(_Base):
 
 
 class OrderResponse(_Base):
-    """Response from POST /api/v1/orders or GET /api/v1/orders."""
-    id: str
+    """Response from POST /api/v1/orders or GET /api/v1/orders.
+
+    The live server returns a different shape than the original docs:
+        {"order_id": "...", "execution_price": 403.08, "simulated_date": "...",
+         "executed_at": "...", "dp_charges": 0, ...}
+    so we accept both shapes via AliasChoices (server keys first, doc keys as
+    fallback). Locally-constructed rejections still use the doc field names.
+    """
+    id: str = Field(validation_alias=AliasChoices("order_id", "id"))
     ticker: str
     action: str
     quantity: int
-    price: float  # fill price (close of date)
+    price: float = Field(validation_alias=AliasChoices("execution_price", "price", "fill_price"))
     brokerage: float = 0.0
-    dp_charge: float = 0.0
-    status: Literal["FILLED", "REJECTED", "PENDING"] = "FILLED"
-    reject_code: Optional[str] = None
-    reject_message: Optional[str] = None
-    date: _date
-    timestamp: datetime
+    dp_charge: float = Field(default=0.0, validation_alias=AliasChoices("dp_charges", "dp_charge"))
+    # P3-20: "UNKNOWN" = server returned an empty/unparseable success body;
+    # the order's true outcome is resolved by an immediate portfolio
+    # reconcile (never applied to the local ledger as a phantom fill).
+    status: Literal["FILLED", "REJECTED", "PENDING", "UNKNOWN"] = "FILLED"
+    reject_code: Optional[str] = Field(default=None, validation_alias=AliasChoices("reject_code", "rejection_reason"))
+    reject_message: Optional[str] = Field(default=None, validation_alias=AliasChoices("reject_message", "message"))
+    date: _date = Field(validation_alias=AliasChoices("simulated_date", "order_date", "date"))
+    timestamp: datetime = Field(validation_alias=AliasChoices("executed_at", "server_received_at", "timestamp"))
 
 
 class Position(_Base):
     ticker: str
     quantity: int
-    avg_price: float
+    # Live server sends `avg_buy_price` / `average_buy_price`; docs say avg_price.
+    avg_price: float = Field(validation_alias=AliasChoices(
+        "avg_buy_price", "average_buy_price", "avg_price", "buy_price"))
     current_price: Optional[float] = None
     unrealized_pnl: Optional[float] = None
 
@@ -129,14 +149,18 @@ class PortfolioResponse(_Base):
     # Cash & equity — portal returns `available_cash` and `total_wealth` /
     # `total_portfolio_value` for equity. Fall back to defaults if neither
     # is present so a partial response still parses.
-    cash: float = Field(default=0.0, validation_alias="available_cash")
-    equity: float = Field(default=0.0, validation_alias="total_portfolio_value")
+    cash: float = Field(default=0.0, validation_alias=AliasChoices(
+        "available_cash", "cash_balance", "cash"))
+    equity: float = Field(default=0.0, validation_alias=AliasChoices(
+        "total_wealth", "total_portfolio_value", "equity"))
     # P&L — portal uses American spelling (realized_pnl, unrealized_pnl).
-    realised_pnl: float = Field(default=0.0, validation_alias="realized_pnl")
-    unrealised_pnl: float = Field(default=0.0, validation_alias="unrealized_pnl")
-    # Positions — portal returns `holdings` (longs) and a separate shorts list;
-    # names vary across versions, so we coerce at parse time.
-    positions: list[Position] = Field(default_factory=list)
+    realised_pnl: float = Field(default=0.0, validation_alias=AliasChoices(
+        "realized_pnl", "realised_pnl"))
+    unrealised_pnl: float = Field(default=0.0, validation_alias=AliasChoices(
+        "unrealized_pnl", "unrealised_pnl"))
+    # Positions — live server returns `holdings` (longs); docs say `positions`.
+    positions: list[Position] = Field(default_factory=list,
+                                      validation_alias=AliasChoices("holdings", "positions"))
     shorts: list[ShortPosition] = Field(default_factory=list)
     day_trades_remaining: Optional[int] = None
     orders_today: Optional[int] = None

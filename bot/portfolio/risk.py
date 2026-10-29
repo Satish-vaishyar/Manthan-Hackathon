@@ -59,7 +59,19 @@ class RiskManager:
     def __init__(self, settings: RiskSettings, settlement_calendar) -> None:
         self.settings = settings
         self.calendar = settlement_calendar
-        self.dd = DrawdownState(peak_equity=1_000_000.0, current_equity=1_000_000.0)
+        # P3-14: seed peak_equity at 0 so the first reconcile can set the
+        # real value. The previous default of 1_000_000 caused a "drawdown
+        # 100%" false-positive at boot and a needless SAFE_MODE bounce.
+        self.dd = DrawdownState(peak_equity=0.0, current_equity=0.0)
+
+    def seed_equity(self, equity: float) -> None:
+        """P3-14: call after the first reconcile so peak_equity starts at
+        the real portfolio value (no false-positive DD breaker on boot)."""
+        if equity <= 0:
+            return
+        if self.dd.peak_equity <= 0:
+            self.dd.peak_equity = equity
+            self.dd.current_equity = equity
 
     # ------------------------------------------------------------------
     # DD breakers

@@ -1,33 +1,68 @@
 {
   "AERX": [
-    "Israel",
+    "Ukrainian",
     "Hannah Thomas",
-    "Gaza",
-    "Ukraine"
+    "Kyiv",
+    "Patriot",
+    "Artemis"
   ],
-  "BLUX": [],
+  "BLUX": [
+    "Dies",
+    "Chris Kluwe"
+  ],
   "DSNY": [
     "DreamScape",
-    "Plus",
+    "Jimmy Kimmel",
     "Star Wars",
-    "Nothing",
-    "Troubles"
+    "Champions League",
+    "Marvel"
   ],
-  "HAVN": [],
+  "HAVN": [
+    "HavenStay",
+    "Booking",
+    "Joseph Gaines"
+  ],
   "HMDP": [
-    "Haven Depot"
+    "Kilmar",
+    "Border Patrol",
+    "Southern California",
+    "Minute Challenge",
+    "Officers"
   ],
-  "MOTR": [],
-  "ORCX": [],
+  "MARKET": [],
+  "MOTR": [
+    "Chess",
+    "Magnus Carlsen",
+    "Carlsen",
+    "Tupac Shakur",
+    "Gukesh Dommaraju"
+  ],
+  "ORCX": [
+    "Lawrence Vance",
+    "David Ellison",
+    "Nevada",
+    "Stargate",
+    "Ellisons"
+  ],
   "PLNX": [
+    "This",
+    "Despite",
     "Polestar",
     "Polestar Analytics",
-    "PLNX",
-    "Corp",
-    "Nasdaq"
+    "NASDAQ"
   ],
   "ROUT": [
-    "RouteWave"
+    "RouteWave Delivery",
+    "Ocado",
+    "Wayve",
+    "Jonathan Rinderknecht",
+    "Palisades"
   ],
-  "SONA": []
+  "SONA": [
+    "Sonata",
+    "Schubert",
+    "Sonata Annual",
+    "Reel",
+    "Eurovision"
+  ]
 }

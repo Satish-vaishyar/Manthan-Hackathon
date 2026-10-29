@@ -67,6 +67,7 @@ from .portfolio.constructor import (
 )
 from .portfolio.ledger import Ledger
 from .portfolio.risk import RiskManager
+from .portfolio.rl_tuner import RLTuner, build_tuner_from_settings
 from .portfolio.settlement import SettlementCalendar
 from .portfolio.tax_engine import TaxEngineConfig
 from .features import RingBuffer, build_model1_features, build_model3_features
@@ -150,6 +151,28 @@ class TradingBot:
             mom_fn=mom_fn,  # momentum now has its own model3 scorer
             rules=self.rules_fallback,
         )
+        # P3-18: statistically-optimized weights (Monte Carlo + Markowitz-on-IC,
+        # see scripts/optimize_weights.py). When weights_mode == "optimized"
+        # and the JSON exists, it overrides the static YAML weights AND is
+        # injected as the RL tuner's arm 0 so online learning starts from the
+        # data-estimated optimum rather than a hand-picked guess.
+        optimized_w = self._load_optimized_weights(settings)
+        if optimized_w is not None:
+            self.signals_ensemble.settings.weights = dict(optimized_w)
+
+        # P3-15: optional RL tuner — UCB1 bandit over ensemble-weight
+        # triples. When enabled, we override signals.weights before each
+        # evaluate() call and feed back realized P&L after fills.
+        self.rl_tuner = build_tuner_from_settings(settings.strategy)
+        if self.rl_tuner is not None:
+            if optimized_w is not None:
+                from .portfolio.rl_tuner import Arm
+                self.rl_tuner.arms[0] = Arm(weights=dict(optimized_w))
+            # Force the first selection so initial weights are recorded.
+            self.rl_tuner.force_select()
+            _log.info("rl_tuner_ready", n_arms=len(self.rl_tuner.arms),
+                      current=self.rl_tuner.current_weights(), component="main")
+
         self.signals = SignalsBundle(
             tagger=self.event_tagger,
             volatility=self.volatility,
@@ -173,11 +196,42 @@ class TradingBot:
             validator=self.validator,
             ledger=self.ledger,
             journal=self.journal,
+            on_state_divergence=self._on_state_divergence,
         )
         self._stop = asyncio.Event()
         self._tasks: list[asyncio.Task] = []
         self._universe: set[str] = set()
         self._sector_of: dict[str, str] = {}
+
+    @staticmethod
+    def _load_optimized_weights(settings) -> Optional[dict[str, float]]:
+        """P3-18: read configs/optimized_weights.json if weights_mode=optimized."""
+        if getattr(settings.strategy, "weights_mode", "static") != "optimized":
+            return None
+        import json as _json
+        import os as _os
+        path = getattr(settings.strategy, "optimized_weights_path",
+                       "configs/optimized_weights.json")
+        if not _os.path.exists(path):
+            _log.warning("optimized_weights_missing", path=path,
+                         fallback="static yaml weights", component="main")
+            return None
+        try:
+            with open(path, "r", encoding="utf-8-sig") as fh:
+                payload = _json.load(fh)
+            w = {str(k): float(v) for k, v in (payload.get("weights") or {}).items()}
+            if not w or abs(sum(w.values()) - 1.0) > 0.05:
+                _log.warning("optimized_weights_invalid", path=path, weights=w,
+                             component="main")
+                return None
+            _log.info("optimized_weights_loaded", weights=w,
+                      n_days=payload.get("n_days"),
+                      ic_ir=payload.get("ic_ir"), component="main")
+            return w
+        except Exception as e:  # noqa: BLE001
+            _log.warning("optimized_weights_load_failed", err=repr(e),
+                         path=path, component="main")
+            return None
 
     # ------------------------------------------------------------------
     # Optional model loaders — fail-soft; if the artifact isn't exported yet
@@ -240,16 +294,21 @@ class TradingBot:
             scorer = Model2NewsScorer()
             keyword = KeywordNewsScorer()
             if scorer.ready:
-                _log.info("model2_bridge_ready", component="main")
+                _log.info("model2_bridge_ready",
+                          n_members=len(scorer._scorer.members), component="main")
             else:
-                _log.info("model2_bridge_not_ready_using_keyword_fallback",
-                          component="main")
+                _log.warning("model2_bridge_not_ready_using_keyword_fallback",
+                             err=scorer._last_err, component="main")
 
             def _news_fn(bundle: DayBundle) -> dict[str, float]:
                 try:
                     if scorer.ready:
                         feats = scorer.score(bundle)
-                        return {t: feats[t]["news_score"] for t in feats}
+                        out = {t: feats[t]["news_score"] for t in feats}
+                        n_nonzero = sum(1 for v in out.values() if v != 0.0)
+                        _log.info("m2_score_computed", n_tickers=len(out),
+                                  n_nonzero=n_nonzero, component="main")
+                        return out
                 except Exception as e:  # noqa: BLE001
                     _log.warning("model2_score_failed", err=repr(e), component="main")
                 # Fallback path: keyword scorer
@@ -389,20 +448,28 @@ class TradingBot:
     # ------------------------------------------------------------------
     # Universe discovery
     # ------------------------------------------------------------------
-    async def _discover_universe(self) -> None:
-        try:
-            raw = await self.api.get("/api/v1/stocks")
-            # Platform returns a list of StockInfo-shaped dicts
-            items = raw.get("stocks", raw) if isinstance(raw, dict) else raw
-            if isinstance(items, list):
-                self._universe = {it.get("ticker") for it in items if isinstance(it, dict) and it.get("ticker")}
-                self._sector_of = {it.get("ticker"): (it.get("sector") or "")
-                                    for it in items if isinstance(it, dict) and it.get("ticker")}
-                _log.info("universe_discovered", n=len(self._universe), component="main")
-            else:
-                _log.warning("universe_discovery_failed", shape=type(items).__name__, component="main")
-        except Exception as e:  # noqa: BLE001
-            _log.warning("universe_discovery_error", err=repr(e), component="main")
+    async def _discover_universe(self, retries: int = 12, delay_s: float = 5.0) -> None:
+        """Fetch /api/v1/stocks. Retries: the endpoint can 504/timeout while the
+        platform warms up (observed live), and without a universe the bot has no
+        tickers to trade and no backfill for M1/M3."""
+        for attempt in range(1, retries + 1):
+            try:
+                raw = await self.api.get("/api/v1/stocks")
+                items = raw.get("stocks", raw) if isinstance(raw, dict) else raw
+                if isinstance(items, list) and items:
+                    self._universe = {it.get("ticker") for it in items if isinstance(it, dict) and it.get("ticker")}
+                    self._sector_of = {it.get("ticker"): (it.get("sector") or "")
+                                        for it in items if isinstance(it, dict) and it.get("ticker")}
+                    _log.info("universe_discovered", n=len(self._universe),
+                              attempt=attempt, component="main")
+                    return
+                _log.warning("universe_discovery_failed", shape=type(items).__name__,
+                             attempt=attempt, component="main")
+            except Exception as e:  # noqa: BLE001
+                _log.warning("universe_discovery_error", err=repr(e),
+                             attempt=attempt, component="main")
+            await asyncio.sleep(delay_s)
+        _log.error("universe_discovery_exhausted", retries=retries, component="main")
 
     def _expected_tickers(self) -> set[str]:
         return self._universe
@@ -522,7 +589,25 @@ class TradingBot:
             from collections import defaultdict, deque
             self.ledger.lots = defaultdict(deque)
             self.ledger.shorts = {}
+            # P3-20: cache SERVER holdings/shorts verbatim. The server can
+            # report NEGATIVE holdings (a short carried inside `holdings`,
+            # e.g. -1166). Every SELL/COVER is clamped against this cache
+            # before submission so we never send an order the server would
+            # reject with INSUFFICIENT_MARGIN / INSUFFICIENT_HOLDINGS.
+            self._server_holdings = {}
+            self._server_shorts = {}
             for pos in p.positions:
+                self._server_holdings[pos.ticker] = int(pos.quantity)
+                if pos.quantity < 0:
+                    # Server-side short carried as a negative holding.
+                    self._server_shorts[pos.ticker] = int(-pos.quantity)
+                    self.ledger.shorts[pos.ticker] = ShortPos(
+                        ticker=pos.ticker, qty=int(-pos.quantity),
+                        entry_price=pos.avg_price,
+                        open_date=p.timestamp.date() if hasattr(p.timestamp, "date") else _date.today(),
+                        margin_locked=0.0,
+                    )
+                    continue
                 self.ledger.lots[pos.ticker].append(Lot(
                     ticker=pos.ticker, qty=pos.quantity, price=pos.avg_price,
                     buy_date=p.timestamp.date() if hasattr(p.timestamp, "date") else _date.today(),
@@ -531,6 +616,7 @@ class TradingBot:
                 if pos.current_price:
                     self.ledger.last_close[pos.ticker] = pos.current_price
             for sp in p.shorts:
+                self._server_shorts[sp.ticker] = int(sp.quantity)
                 self.ledger.shorts[sp.ticker] = ShortPos(
                     ticker=sp.ticker, qty=sp.quantity, entry_price=sp.entry_price,
                     open_date=sp.open_date, margin_locked=sp.margin_locked,
@@ -538,8 +624,172 @@ class TradingBot:
                 self.ledger.last_close[sp.ticker] = sp.entry_price
             _log.info("reconciled", cash=p.cash, equity=p.equity,
                       longs=len(p.positions), shorts=len(p.shorts), component="main")
+            # P3-19: always-visible holdings snapshot (legacy positions
+            # included) with unrealised P&L per name.
+            _snap = []
+            for pos in p.positions:
+                px = pos.current_price or self.ledger.last_close.get(pos.ticker, 0.0)
+                upnl = (px - pos.avg_price) * pos.quantity if px > 0 else 0.0
+                _snap.append({"ticker": pos.ticker, "qty": pos.quantity,
+                              "avg": round(pos.avg_price, 2), "last": round(px, 2),
+                              "unrealized_pnl": round(upnl, 0)})
+            for sp in p.shorts:
+                px = self.ledger.last_close.get(sp.ticker, sp.entry_price)
+                _snap.append({"ticker": sp.ticker, "qty": -sp.quantity,
+                              "avg": round(sp.entry_price, 2), "last": round(px, 2),
+                              "unrealized_pnl": round((sp.entry_price - px) * sp.quantity, 0)})
+            _log.info("holdings_snapshot", positions=_snap,
+                      n=len(_snap), component="main")
+            if not getattr(self, "_startup_holdings_logged", False):
+                self._startup_holdings_logged = True
+                _log.info("startup_holdings_loaded", positions=_snap,
+                          cash=p.cash, equity=p.equity, component="main")
+            # P3-18: server equity is the source of truth for the DD breaker.
+            self._last_server_equity = float(p.equity)
+            # P3-14: seed risk peak_equity on first successful reconcile so
+            # the DD breaker doesn't false-positive on the zero-equity boot
+            # state.
+            self.risk.seed_equity(p.equity)
+            # P3-14: maintain trailing peak for wealth-tracking (the risk
+            # manager already tracks this, but expose it on the bot for the
+            # RL tuner / observability).
+            self._peak_equity = max(getattr(self, "_peak_equity", 0.0), p.equity)
+            # P3-15: feed realised P&L delta back to the RL tuner. We track
+            # the equity delta since last reconcile; that's the cleanest
+            # signal the tuner gets (per-day reward).
+            if self.rl_tuner is not None:
+                prev = getattr(self, "_prev_equity_for_rl", None)
+                if prev is not None:
+                    delta = float(p.equity) - float(prev)
+                    self.rl_tuner.observe(delta)
+                self._prev_equity_for_rl = float(p.equity)
+            # P3-17: realized profits land in server cash after fills. Deploy
+            # idle cash immediately (between day-bundles) so utilisation
+            # stays at the target and freed capital keeps compounding.
+            await self._maybe_deploy_idle_cash(p)
+            # P3-13 cool-down: count consecutive losing days; reset on a green day.
+            # A "day" is one reconcile-to-reconcile delta. We track the last seen
+            # realized_pnl from the portfolio payload (when available) and the
+            # day we last saw it; on a new day, compare against the prior and
+            # increment the streak if it dropped. Stops opening new trades when
+            # the streak hits `risk.max_consecutive_loss_pause`.
+            try:
+                from datetime import date as _d
+                today = _date.today()
+                eq = float(p.equity)
+                prev_eq = getattr(self, "_last_reconcile_equity", None)
+                if prev_eq is not None and today != getattr(self, "_last_reconcile_day", today):
+                    if eq < prev_eq:
+                        self._consec_loss_days = int(getattr(self, "_consec_loss_days", 0)) + 1
+                    elif eq > prev_eq:
+                        self._consec_loss_days = 0
+                    self._last_reconcile_day = today
+                self._last_reconcile_equity = eq
+            except Exception:  # noqa: BLE001
+                pass
         except Exception as e:  # noqa: BLE001
             _log.warning("reconcile_failed", err=repr(e), component="main")
+
+    # ------------------------------------------------------------------
+    # P3-20: state-divergence resync
+    # ------------------------------------------------------------------
+    async def _on_state_divergence(self, reason: str = "", ticker: str = "") -> None:
+        """OrderManager reports a possible ledger/server divergence
+        (unparseable order response or 4xx rejection). Immediately
+        re-reconcile so the ledger + server-holdings cache resync from the
+        server's portfolio before the next decision."""
+        _log.info("state_divergence_resync", reason=reason, ticker=ticker,
+                  component="main")
+        try:
+            await self._reconcile()
+        except Exception as e:  # noqa: BLE001
+            _log.warning("divergence_resync_failed", err=repr(e), component="main")
+
+    # ------------------------------------------------------------------
+    # P3-17: idle-cash deployer
+    # ------------------------------------------------------------------
+    async def _maybe_deploy_idle_cash(self, p: PortfolioResponse) -> None:
+        """Deploy cash freed by realised profits between day-bundles.
+
+        Called right after every successful reconcile. If the current cash
+        utilisation (1 - cash/equity) is more than `deploy_epsilon` below
+        `risk.target_cash_utilization`, place ONE extra BUY for the
+        highest-conviction ticker from the latest evaluation, sized to the
+        smaller of (a) the utilisation gap and (b) `max_cash_per_trade` of
+        available cash. All existing guards still apply: daily order budget,
+        min notional, per-name cap, validator (incl. cash reservation).
+
+        Disabled via `strategy.idle_cash_deploy.enabled: false`.
+        """
+        try:
+            if self.lifecycle.state != BotState.TRADING:
+                return
+            if self.settings.dry_run:
+                return
+            cfg = getattr(self.settings.strategy, "idle_cash_deploy", None)
+            if cfg is not None and not getattr(cfg, "enabled", True):
+                return
+            scores = getattr(self, "_last_scores", None)
+            if not scores:
+                return  # no evaluation yet this session
+            equity = float(p.equity or 0.0)
+            cash = float(p.cash or 0.0)
+            if equity <= 0 or cash <= 0:
+                return
+            target_util = float(getattr(self.settings.risk, "target_cash_utilization", 0.85) or 0.85)
+            epsilon = float(getattr(cfg, "epsilon", 0.05) if cfg is not None else 0.05)
+            current_util = max(0.0, min(1.0, 1.0 - cash / equity))
+            gap = target_util - current_util
+            if gap <= epsilon:
+                return  # close enough to target — nothing to do
+            # Daily order budget still applies.
+            max_orders = self.settings.strategy.max_orders_per_day
+            remaining = await self.lifecycle.gate.orders_remaining(max_orders)
+            if remaining <= 0:
+                return
+            # Pick the highest-conviction ticker that isn't excluded.
+            excluded = set(self.settings.strategy.exclude_tickers or [])
+            best = next((s for s in sorted(scores, key=lambda s: s.score, reverse=True)
+                         if s.ticker not in excluded and s.score > 0), None)
+            if best is None:
+                return
+            price = self.ledger.last_close.get(best.ticker, 0.0) or float(best.price or 0.0)
+            if price <= 0:
+                return
+            # Size: utilisation gap in rupees, capped by max_cash_per_trade
+            # of available cash, minus brokerage and a small price-drift
+            # buffer (1%) so the server never sees an over-cash order.
+            gap_cash = gap * equity
+            max_frac = float(getattr(self.settings.risk, "max_cash_per_trade", 0.90) or 0.90)
+            budget = min(gap_cash, cash * max_frac) * 0.99
+            budget -= self.settings.tax.brokerage_per_order
+            qty = int(budget / price)
+            if qty <= 0:
+                return
+            notional = qty * price
+            if notional < self.settings.strategy.min_trade_notional:
+                return  # gap too small to be worth a trade
+            # Per-name cap: don't exceed max_name_weight for this ticker.
+            cur_mv = self.ledger.holding_qty(best.ticker) * price
+            if (cur_mv + notional) / equity > self.settings.risk.max_name_weight:
+                return
+            req = OrderRequest(
+                ticker=best.ticker, action="BUY", quantity=qty,
+                date=getattr(self, "_last_sim_date", None) or _date.today(),
+                reason=f"idle_cash_deploy util={current_util:.2%}->{target_util:.2%}",
+            )
+            _log.info("idle_cash_deploy", ticker=best.ticker, qty=qty,
+                      notional=round(notional, 0), util=round(current_util, 4),
+                      target=target_util, cash=round(cash, 0), component="main")
+            await self.order_manager.submit(
+                req,
+                scores={"ensemble": best.score},
+                reasons=[f"regime={getattr(self, '_last_regime', 'neutral')}",
+                         "idle_cash_deploy"],
+            )
+            await self.lifecycle.gate.record_order()
+        except Exception as e:  # noqa: BLE001
+            _log.warning("idle_cash_deploy_failed", err=repr(e), component="main")
 
     # ------------------------------------------------------------------
     # Preflight router — drain preflight_ticks out of the queue
@@ -552,7 +802,7 @@ class TradingBot:
                 continue
             except asyncio.CancelledError:
                 return
-            if event.event_type == "preflight_tick":
+            if event.event_type in ("preflight_tick", "preflight_news"):
                 from .contracts import PreflightTickEvent
                 if isinstance(event, PreflightTickEvent):
                     await self.heartbeat.on_preflight(event)
@@ -570,20 +820,30 @@ class TradingBot:
     async def _health_loop(self) -> None:
         while not self._stop.is_set():
             try:
-                equity = self.ledger.equity
+                # P3-18: use the server-reconciled equity for the DD breaker.
+                # self.ledger.equity is a *local mirror* and lags/mismatches
+                # the server right after boot (partial fill replay), which
+                # caused a false RISK_DD_HARD (drawdown 20%) -> SAFE_MODE
+                # bounce on the 2026-10-29 evaluation run. Fall back to the
+                # ledger only if no reconcile has completed yet.
+                equity = float(getattr(self, "_last_server_equity", 0.0) or 0.0)
+                if equity <= 0:
+                    equity = self.ledger.equity
                 v = self.risk.update_equity(equity)
                 if not v.ok:
                     _log.warning("dd_breaker", code=v.code, msg=v.message, component="health")
                     if v.code == "RISK_DD_HARD":
                         await self.lifecycle.enter_safe_mode(reason=v.message or v.code)
                         break
-                # Reconcile every 30s during trading
+                # P3-14: reconcile at the configured cadence (default 15s)
+                # during trading. Was hard-coded 30s.
                 if self.lifecycle.state == BotState.TRADING:
                     await self._reconcile()
             except Exception as e:  # noqa: BLE001
                 _log.warning("health_loop_err", err=repr(e), component="health")
             try:
-                await asyncio.wait_for(self._stop.wait(), timeout=30.0)
+                await asyncio.wait_for(self._stop.wait(),
+                                       timeout=self.settings.timing.reconcile_interval_s)
                 return
             except asyncio.TimeoutError:
                 continue
@@ -625,6 +885,18 @@ class TradingBot:
         short_allowed = self.lifecycle.state == BotState.TRADING  # tighten if needed
         await self.lifecycle.gate.open_for_day(bundle.simulated_date, max_orders, short_allowed)
 
+        # P3-13: cool-down gate — pause new entries after N consecutive losing
+        # reconcile days. Existing positions are unaffected (we still call
+        # _on_day downstream, so risk/validator can act on stops). The gate
+        # only suppresses new trade generation by zeroing max_orders.
+        pause = int(getattr(self.settings.risk, "max_consecutive_loss_pause", 0) or 0)
+        if pause > 0:
+            streak = int(getattr(self, "_consec_loss_days", 0))
+            if streak >= pause:
+                _log.info("cooldown_active", streak=streak, pause=pause,
+                          sim_date=bundle.simulated_date.isoformat(), component="main")
+                max_orders = 0
+
         # Wait for TRADING state if not yet (preflight still happening)
         if self.lifecycle.state != BotState.TRADING:
             await self.lifecycle.wait_for(BotState.TRADING, timeout=2.0)
@@ -650,6 +922,12 @@ class TradingBot:
         # constructor applies the regime scaling directly.
         try:
             regime_label = self.regime.update(bundle)
+            # P3-15: if RL tuner is on, override the ensemble weights for
+            # THIS day's evaluation. The tuner updates its weights via UCB1
+            # every `update_every_trades` fills, so the ensemble adaptively
+            # tilts between ranker-heavy / momentum-heavy / balanced.
+            if self.rl_tuner is not None:
+                self.signals_ensemble.settings.weights = self.rl_tuner.current_weights()
             evals = self.signals_ensemble.evaluate(bundle, regime_label)
         except Exception as e:  # noqa: BLE001
             _log.error("ensemble_failed", err=repr(e), component="strategy")
@@ -666,6 +944,13 @@ class TradingBot:
                 price=price,
             ))
 
+        # P3-17: cache the latest conviction scores + context so the idle-cash
+        # deployer (_maybe_deploy_idle_cash) can place extra BUYs between
+        # day-bundles when realized profits free up cash.
+        self._last_scores = scores_for_constructor
+        self._last_regime = regime_label
+        self._last_sim_date = bundle.simulated_date
+
         equity = self.ledger.equity or 1.0
         # M5: regime + gross_long_target are applied inside build_target_weights.
         target_w = build_target_weights(
@@ -675,6 +960,12 @@ class TradingBot:
                          "Finance": self.settings.risk.max_sector_weight},
             sector_of=self._sector_of,
             gross_long_target=self.settings.risk.gross_long_target,
+            current_holdings={t: q for t, q in self.ledger.holdings.items()},
+            current_shorts={t: sp.qty for t, sp in self.ledger.shorts.items()},
+            last_close={t: bundle.ticks[t].close for t in bundle.ticks if t in bundle.ticks},
+            target_cash_utilization=float(
+                getattr(self.settings.risk, "target_cash_utilization", 0.85) or 0.85
+            ),
         )
         max_orders_remaining = await self.lifecycle.gate.orders_remaining(max_orders)
         deltas = build_trade_deltas(
@@ -690,8 +981,34 @@ class TradingBot:
 
         # 5) Execute trades
         for d in deltas.trades:
+            qty = d.qty
+            # P3-20: clamp SELL/COVER to the SERVER-verified position so the
+            # server never sees an order it would reject with
+            # INSUFFICIENT_MARGIN / INSUFFICIENT_HOLDINGS. The local ledger
+            # can drift (unparseable order responses, async fills); the
+            # reconcile cache is the source of truth.
+            server_h = getattr(self, "_server_holdings", None)
+            server_s = getattr(self, "_server_shorts", None)
+            if d.action == "SELL" and server_h is not None:
+                sellable = max(0, int(server_h.get(d.ticker, 0)))
+                if qty > sellable:
+                    _log.info("sell_clamped_to_server", ticker=d.ticker,
+                              wanted=qty, sellable=sellable, component="main")
+                    qty = sellable
+                if qty <= 0:
+                    _log.info("sell_skipped_no_server_holding", ticker=d.ticker,
+                              server_qty=int(server_h.get(d.ticker, 0)), component="main")
+                    continue
+            elif d.action == "COVER" and server_s is not None:
+                coverable = max(0, int(server_s.get(d.ticker, 0)))
+                if qty > coverable:
+                    _log.info("cover_clamped_to_server", ticker=d.ticker,
+                              wanted=qty, coverable=coverable, component="main")
+                    qty = coverable
+                if qty <= 0:
+                    continue
             req = OrderRequest(
-                ticker=d.ticker, action=d.action, quantity=d.qty,
+                ticker=d.ticker, action=d.action, quantity=qty,
                 date=bundle.simulated_date, reason=d.reason,
             )
             # Find the matching eval for journal context

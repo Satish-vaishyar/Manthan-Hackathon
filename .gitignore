@@ -45,3 +45,9 @@ model*/data/raw/
 __pycache__/
 .pytest_cache/
 *.pyc
+
+model2/finbert_cache/
+model2/artifacts/*.pt
+*.safetensors
+model3/artifacts/
+model2/finbert_hf_home/

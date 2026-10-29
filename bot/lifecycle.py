@@ -41,7 +41,10 @@ _LEGAL: dict[BotState, set[BotState]] = {
     BotState.TRADING: {BotState.PAUSED, BotState.COMPLETED, BotState.SAFE_MODE, BotState.SHUTDOWN},
     BotState.PAUSED: {BotState.TRADING, BotState.COMPLETED, BotState.SAFE_MODE, BotState.SHUTDOWN},
     BotState.COMPLETED: {BotState.SHUTDOWN},
-    BotState.SAFE_MODE: {BotState.TRADING, BotState.PAUSED, BotState.COMPLETED, BotState.SHUTDOWN},
+    # SAFE_MODE must be able to re-enter PREFLIGHT: a false-positive DD breaker
+    # (e.g. reconcile failed during a network blip → equity=0 → dd=100%) would
+    # otherwise trap the bot forever while the server says stage=preflight.
+    BotState.SAFE_MODE: {BotState.PREFLIGHT, BotState.TRADING, BotState.PAUSED, BotState.COMPLETED, BotState.SHUTDOWN},
     BotState.SHUTDOWN: set(),
 }
 

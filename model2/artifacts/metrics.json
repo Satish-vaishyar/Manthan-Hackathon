@@ -1,0 +1,37 @@
+{
+  "seeds": [
+    {
+      "seed": 42,
+      "best_epoch": 0,
+      "best_val_ic_pooled": 0.10070614892170152
+    },
+    {
+      "seed": 43,
+      "best_epoch": 3,
+      "best_val_ic_pooled": 0.043558131116353975
+    },
+    {
+      "seed": 44,
+      "best_epoch": 1,
+      "best_val_ic_pooled": 0.05921670828221367
+    }
+  ],
+  "val": {
+    "n": 440,
+    "ic_pooled": 0.0969699787142026,
+    "ic_daily_mean": 0.023972602739726033,
+    "days_ic": 73,
+    "top20_minus_bottom20": 0.009677693220510264,
+    "dir_auc": 0.5056913603284194,
+    "relevance_auc_vs_weak_labels": 0.6948906560636182
+  },
+  "test": {
+    "n": 443,
+    "ic_pooled": 0.10601143823823417,
+    "ic_daily_mean": 0.10634920634920636,
+    "days_ic": 72,
+    "top20_minus_bottom20": 0.0031427935918441874,
+    "dir_auc": 0.5107632093933463,
+    "relevance_auc_vs_weak_labels": 0.5521331738437002
+  }
+}

@@ -1,8 +1,12 @@
 {
-  "_comment": "Hand-checked company aliases per ticker. Merged with data/processed/aliases_auto.json. Add the masked company/brand names you see in headlines (e.g. DSNY -> DreamScape). Leave a list empty if unsure.",
-  "DSNY": ["DreamScape"],
-  "PLNX": ["Polestar"],
+  "_comment": "Hand-checked company aliases per ticker. Merged with data/processed/aliases_auto.json. Add only true company brand names you see in headlines (e.g. DSNY -> DreamScape). Do NOT add competitor / context company names (TikTok, OpenAI, BigBear.ai, etc.) - those should NOT be flagged as 'about us'.",
+  "AERX": ["AeroVanguard"],
+  "BLUX": ["BlueMatrix"],
+  "DSNY": ["DreamScape", "DreamStream"],
+  "HAVN": ["HavenStay"],
+  "HMDP": ["Haven Depot"],
+  "MOTR": ["MotorWorks"],
+  "PLNX": ["Polestar", "Polestar Analytics"],
   "ROUT": ["RouteWave"],
-  "SONA": ["Sonata"],
-  "HMDP": ["Haven Depot"]
+  "SONA": ["Sonata"]
 }

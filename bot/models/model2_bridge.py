@@ -11,6 +11,10 @@ This bridge:
     - Maps the 8-feature output to a single [-1, +1] news_score for the ensemble.
     - Provides a fallback when the artifact isn't ready (calls rules-based scorer).
     - Surfaces `news_features[ticker] = 8-vector` so model1 can consume it later.
+    - Resolves the FinBERT encoder (ProsusAI/finbert) from the LOCAL snapshot at
+      `model2/finbert_cache/snapshots/<rev>/` instead of going to the HuggingFace
+      hub. This is required because the bot must run offline (per docs/02 §1) and
+      the user copied the FinBERT weights to a local path inside the repo.
 
 Why import model2 directly rather than re-implement?
     Per docs/05 §4: same code path for training and inference. Re-implementing
@@ -18,13 +22,70 @@ Why import model2 directly rather than re-implement?
 """
 from __future__ import annotations
 
+import json
 import math
+import os
 import sys
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import date as _date
 from pathlib import Path
 from typing import Optional
+
+import yaml
+
+# ---------------------------------------------------------------------------
+# Offline configuration — must run BEFORE transformers is imported anywhere
+# downstream of this module. The encoder resolution is also patched below so
+# `AutoTokenizer.from_pretrained("ProsusAI/finbert")` reads from the local
+# snapshot directory we ship inside the repo.
+# ---------------------------------------------------------------------------
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_FINBERT_LOCAL_DIR = _REPO_ROOT / "model2" / "finbert_cache" / "snapshots" / "0bc2ac10dda6929bcb1f77ccc43c7ec5c424f031"
+_FINBERT_ENCODER_ID = "ProsusAI/finbert"
+
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
+# Monkey-patch AutoTokenizer.from_pretrained + AutoModel.from_pretrained so the
+# string "ProsusAI/finbert" is mapped to the local snapshot directory.
+_PATCHED = False
+
+
+def _apply_encoder_patch() -> None:
+    global _PATCHED
+    if _PATCHED:
+        return
+    if not _FINBERT_LOCAL_DIR.exists():
+        return
+    try:
+        import transformers  # noqa: F401
+        from transformers import AutoModel, AutoTokenizer
+    except Exception:  # noqa: BLE001
+        return
+
+    local_dir = str(_FINBERT_LOCAL_DIR)
+    orig_tok = AutoTokenizer.from_pretrained.__func__ if hasattr(AutoTokenizer.from_pretrained, "__func__") else AutoTokenizer.from_pretrained
+    orig_mod = AutoModel.from_pretrained.__func__ if hasattr(AutoModel.from_pretrained, "__func__") else AutoModel.from_pretrained
+
+    @classmethod  # type: ignore[arg-type]
+    def _patched_tok(cls, pretrained_model_name_or_path, *args, **kwargs):
+        if pretrained_model_name_or_path == _FINBERT_ENCODER_ID:
+            pretrained_model_name_or_path = local_dir
+        return orig_tok(cls, pretrained_model_name_or_path, *args, **kwargs)
+
+    @classmethod  # type: ignore[arg-type]
+    def _patched_mod(cls, pretrained_model_name_or_path, *args, **kwargs):
+        if pretrained_model_name_or_path == _FINBERT_ENCODER_ID:
+            pretrained_model_name_or_path = local_dir
+        return orig_mod(cls, pretrained_model_name_or_path, *args, **kwargs)
+
+    AutoTokenizer.from_pretrained = _patched_tok  # type: ignore[assignment]
+    AutoModel.from_pretrained = _patched_mod  # type: ignore[assignment]
+    _PATCHED = True
+
+
+_apply_encoder_patch()
 
 from ..contracts import DayBundle, NewsFlashData, PriceTickData
 
@@ -56,6 +117,15 @@ class Model2NewsScorer:
         self.meta: Optional[Model2Meta] = None
         self._scorer = None
         self._loaded = False
+        self._last_err: Optional[str] = None
+
+    # Module names inside model2/src that collide with model1/src + model3/src
+    # (all three ship a bare `model.py`, `dataset.py`, `export.py`, ...).
+    # Python caches by module name in sys.modules, so whichever loads first
+    # would otherwise be re-used by the others → ImportError (observed live:
+    # "cannot import name 'NRIM' from 'model' (model1/src/model.py)").
+    _COLLIDING = ("infer", "model", "text", "dataset", "prepare", "train",
+                  "export", "baseline", "consolidate", "record_kafka")
 
     def _try_load(self) -> bool:
         if self._loaded:
@@ -64,32 +134,51 @@ class Model2NewsScorer:
             # Add model2/src to sys.path so `from infer import NewsScorer` works
             model2_src = Path(__file__).resolve().parents[2] / "model2" / "src"
             if not (model2_src / "infer.py").exists():
+                self._last_err = "model2/src/infer.py not found"
                 return False
             sp = str(model2_src)
-            if sp not in sys.path:
-                sys.path.insert(0, sp)
+            if sp in sys.path:
+                sys.path.remove(sp)
+            sys.path.insert(0, sp)
+            # Purge colliding names so `from model import NRIM` resolves to
+            # model2/src/model.py even if model1 (or model3) loaded earlier.
+            # Safe: earlier loaders keep direct references to their classes.
+            for name in self._COLLIDING:
+                mod = sys.modules.get(name)
+                if mod is not None:
+                    f = getattr(mod, "__file__", "") or ""
+                    if "model2" not in f.replace("\\", "/"):
+                        del sys.modules[name]
             from infer import NewsScorer, FEATURES  # noqa: F401
             from text import load_aliases
 
             art = self.artifacts_dir
             if not (art / "model2_meta.json").exists():
+                self._last_err = f"model2_meta.json missing in {art}"
                 return False
             self._scorer = NewsScorer(art, device="cpu", quantize=self.quantize)
-            cfg = json.loads((Path(__file__).resolve().parents[2] /
-                              "model2" / "configs" / "model2.yaml").read_text())
+            cfg_path = Path(__file__).resolve().parents[2] / "model2" / "configs" / "model2.yaml"
+            if not cfg_path.exists():
+                self._last_err = f"model2.yaml missing at {cfg_path}"
+                return False
+            cfg = yaml.safe_load(cfg_path.read_text())
             self.meta = Model2Meta(
                 encoder=cfg["model"]["encoder"],
                 max_items=cfg["text"]["max_items_per_day"],
                 max_len=cfg["text"]["max_len"],
                 desc_chars=cfg["text"]["desc_chars"],
             )
+            # yaml paths are relative to model2/ — anchor there
+            model2_root = Path(__file__).resolve().parents[2] / "model2"
             self._aliases = load_aliases(
-                Path(cfg["data"]["aliases_auto"]),
-                Path(cfg["data"]["aliases_manual"]),
+                model2_root / cfg["data"]["aliases_auto"],
+                model2_root / cfg["data"]["aliases_manual"],
             )
             self._loaded = True
+            self._last_err = None
             return True
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            self._last_err = repr(e)
             return False
 
     @property

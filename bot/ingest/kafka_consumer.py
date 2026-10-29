@@ -186,15 +186,20 @@ class KafkaIngest:
                 _log.warning("queue_put_failed", err=repr(e), component="kafka")
 
     def _parse_event(self, topic: str, payload: dict) -> Optional[KafkaEvent]:
-        """Dispatch to the right pydantic model based on topic + event_type."""
+        """Dispatch to the right pydantic model based on topic + event_type.
+
+        IMPORTANT: check event_type FIRST — preflight_tick / preflight_news ride
+        the same topics (market.ticks / market.news) as live events, so a
+        topic-first dispatch mis-parses them and heartbeats never get ACK'd.
+        """
         et = payload.get("event_type") or payload.get("event")
         try:
+            if et in ("preflight_tick", "preflight_news"):
+                return PreflightTickEvent.model_validate(payload)
             if et == "price_tick" or topic == "market.ticks":
                 return PriceTickEvent.model_validate(payload)
             if et == "news_flash" or topic == "market.news":
                 return NewsFlashEvent.model_validate(payload)
-            if et == "preflight_tick":
-                return PreflightTickEvent.model_validate(payload)
             _log.warning("unknown_event_type", event_type=et, topic=topic, component="kafka")
             return None
         except ValidationError as e:

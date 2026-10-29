@@ -51,6 +51,7 @@ class OrderManager:
         validator: OrderValidator,
         ledger: Ledger,
         journal: "DecisionJournal",
+        on_state_divergence=None,
     ) -> None:
         self.settings = settings
         self.api = api
@@ -58,7 +59,21 @@ class OrderManager:
         self.validator = validator
         self.ledger = ledger
         self.journal = journal
+        # P3-20: async callable invoked whenever the server state may have
+        # diverged from our local ledger (unparseable/empty order response,
+        # 4xx rejection). main wires this to an immediate _reconcile().
+        self._on_state_divergence = on_state_divergence
         self.stats = OrderManagerStats()
+
+    def _notify_divergence(self, reason: str, ticker: str = "") -> None:
+        import asyncio as _aio
+        if self._on_state_divergence is None:
+            return
+        try:
+            loop = _aio.get_running_loop()
+            loop.create_task(self._on_state_divergence(reason=reason, ticker=ticker))
+        except RuntimeError:
+            pass
 
     async def submit(
         self,
@@ -99,7 +114,10 @@ class OrderManager:
             )
 
         # 3) Submit
-        self.validator.mark_in_flight(req)
+        # P3-16: reserve cash for BUYs at mark time so subsequent same-batch
+        # validations see a reduced wallet (keeps server rejections at 0).
+        _price = self.ledger.last_close.get(req.ticker, 0.0) if self.ledger is not None else 0.0
+        self.validator.mark_in_flight(req, price=_price)
         self.stats.submitted += 1
         t0 = time.perf_counter()
         body = req.model_dump(mode="json")
@@ -139,6 +157,9 @@ class OrderManager:
             self.stats.rejected += 1
             code = payload.get("error", RejectCode.SERVER_ERROR) if isinstance(payload, dict) else RejectCode.SERVER_ERROR
             msg = payload.get("message", "") if isinstance(payload, dict) else str(payload)
+            # P3-20: a 4xx rejection means our view of the world was wrong —
+            # resync from the server so the NEXT decision uses fresh truth.
+            self._notify_divergence(f"rejected_{code}", req.ticker)
             self._journal_rejection(req, code, msg, scores, reasons)
             return OrderResponse(
                 id="", ticker=req.ticker, action=req.action,
@@ -162,18 +183,29 @@ class OrderManager:
 
         # 7) Success — apply to ledger + journal
         try:
-            filled = OrderResponse.model_validate(payload) if isinstance(payload, dict) else None
+            filled = OrderResponse.model_validate(payload) if isinstance(payload, dict) and payload else None
         except Exception as e:  # noqa: BLE001
             filled = None
             _log.warning("order_response_parse_failed", err=repr(e), payload=payload, component="orders")
 
         if filled is None:
-            # Best-effort: synthesize a minimal fill
-            filled = OrderResponse(
-                id=payload.get("id", "unknown"),
-                ticker=req.ticker, action=req.action, quantity=req.quantity,
-                price=self.ledger.last_close.get(req.ticker, 0.0),
-                status="FILLED", date=req.date, timestamp=datetime.utcnow(),
+            # P3-20: NEVER synthesize a phantom fill from an empty/unparseable
+            # payload — that was the root cause of ledger/server divergence
+            # (local ledger showed long while the server showed -1166 short,
+            # producing INSUFFICIENT_MARGIN rejections on later sells).
+            # Instead: mark the order UNKNOWN, release the in-flight slot,
+            # and trigger an immediate reconcile so the ledger resyncs from
+            # the server's portfolio (the real outcome of the order).
+            self.validator.clear_in_flight(req)
+            _log.warning("order_outcome_unknown",
+                         ticker=req.ticker, action=req.action, qty=req.quantity,
+                         payload=payload, component="orders")
+            self._notify_divergence("order_outcome_unknown", req.ticker)
+            return OrderResponse(
+                id="", ticker=req.ticker, action=req.action, quantity=req.quantity,
+                price=0.0, status="UNKNOWN", reject_code=None,
+                reject_message="empty/unparseable server response; resyncing",
+                date=req.date, timestamp=datetime.utcnow(),
             )
 
         self._apply_fill(filled)

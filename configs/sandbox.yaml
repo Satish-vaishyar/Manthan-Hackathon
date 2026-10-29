@@ -6,7 +6,6 @@ server_ip: 192.168.65.157
 
 # 10 active Kafka tickers + max 4 orders/day matches the docs.
 strategy:
-  top_k: 8
   max_orders_per_day: 4
 
 # Sandbox interval is currently 5s per docs/data README.

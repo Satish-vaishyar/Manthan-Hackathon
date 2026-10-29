@@ -44,6 +44,13 @@ class OrderValidator:
         self.settings = settings
         self.risk = risk
         self._in_flight: set[tuple[str, str, int]] = set()  # (ticker, action, qty)
+        # P3-16: cash reserved by in-flight BUY orders. Without this, a batch
+        # of same-day BUYs each validates against the full ledger.cash and the
+        # later ones get server-rejected INSUFFICIENT_CAPITAL once the first
+        # fill consumes the cash. Reserve optimistically at mark_in_flight()
+        # using the last known close price; release on clear_in_flight().
+        self._reserved_cash: float = 0.0
+        self._reserved_by_key: dict[tuple[str, str, int], float] = {}
 
     def validate(
         self,
@@ -91,14 +98,29 @@ class OrderValidator:
         # Cash check (BUY cash impact = q*p + brokerage; if covers a short, less)
         notional = req.quantity * price
         brokerage = self.settings.tax.brokerage_per_order
+        # P3-16: available cash = ledger cash minus cash already reserved by
+        # in-flight BUYs. Prevents the cash-race where a batch of same-day
+        # BUYs each validate against the full wallet and the later ones get
+        # server-rejected once earlier fills consume the cash.
+        available = ledger.cash - self._reserved_cash
         # Conservative: assume worst-case full long (no short to cover)
-        if ledger.cash < notional + brokerage:
+        if available < notional + brokerage:
             return ValidationResult.deny(RejectCode.INSUFFICIENT_CASH,
-                f"cash {ledger.cash:.2f} < notional+fees {notional + brokerage:.2f}")
+                f"cash {available:.2f} (after {self._reserved_cash:.0f} reserved) "
+                f"< notional+fees {notional + brokerage:.2f}")
         # Min notional
         if notional < self.settings.strategy.min_trade_notional:
             return ValidationResult.deny(RejectCode.RISK_LIMIT,
                 f"notional {notional:.0f} < min {self.settings.strategy.min_trade_notional:.0f}")
+        # P3-14: cap a single BUY at max_cash_per_trade of available cash so
+        # we don't blow 99% of the wallet on one trade. The constructor
+        # should already enforce this, but a stale ledger / queued orders
+        # can still push us over.
+        cap = float(getattr(self.settings.risk, "max_cash_per_trade", 0.90)) * available
+        if notional > cap:
+            return ValidationResult.deny(RejectCode.INSUFFICIENT_CASH,
+                f"notional {notional:.0f} > max_cash_per_trade cap {cap:.0f} "
+                f"({float(getattr(self.settings.risk, 'max_cash_per_trade', 0.90)):.0%} of cash)")
         # Risk: per-name / sector / cash buffer
         v = self.risk.check_buy(ledger, req.ticker, req.quantity, price, req.date)
         if not v.ok:
@@ -143,11 +165,22 @@ class OrderValidator:
     # ------------------------------------------------------------------
     # In-flight tracking
     # ------------------------------------------------------------------
-    def mark_in_flight(self, req: OrderRequest) -> None:
-        self._in_flight.add((req.ticker, req.action, req.quantity))
+    def mark_in_flight(self, req: OrderRequest, price: float = 0.0) -> None:
+        key = (req.ticker, req.action, req.quantity)
+        self._in_flight.add(key)
+        # P3-16: reserve cash for in-flight BUYs so subsequent validations
+        # see a reduced wallet (no INSUFFICIENT_CAPITAL server rejections).
+        if req.action == "BUY" and price > 0:
+            reserved = req.quantity * price + self.settings.tax.brokerage_per_order
+            self._reserved_by_key[key] = reserved
+            self._reserved_cash += reserved
 
     def clear_in_flight(self, req: OrderRequest) -> None:
-        self._in_flight.discard((req.ticker, req.action, req.quantity))
+        key = (req.ticker, req.action, req.quantity)
+        self._in_flight.discard(key)
+        reserved = self._reserved_by_key.pop(key, 0.0)
+        if reserved:
+            self._reserved_cash = max(0.0, self._reserved_cash - reserved)
 
     @property
     def inflight_count(self) -> int:
