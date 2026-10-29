@@ -44,10 +44,12 @@ strategy:
   exit_min_notional: 5000
   max_orders_per_day: 8  # was 4: deployment took multiple sim days; churn now controlled by min_hold_days
   # Higher conviction bar — fewer low-conv BLUX-style churn trades.
-  event_long_threshold: 0.75
+  event_long_threshold: 0.90  # was 0.75: raise entry bar -> fewer, higher-conviction trades (win-rate push)
   event_short_threshold: -0.75
   # BLUX: 22 trades, 45.5% win-rate, −₹27,071 over 18mo — blacklist.
-  exclude_tickers: [BLUX]
+  # HMDP: only lifetime-loser ticker AND −₹82K in tuning iter-1.
+  # SONA: −₹37K in iter-1, structurally weak recently.
+  exclude_tickers: [BLUX, HMDP, SONA]
   # P3-15: opt-in RL tuner — UCB1 bandit over weight triples. Disabled by
   # default; enable to let the bot adapt weights online based on realised
   # per-day equity delta. See bot/portfolio/rl_tuner.py for the algo.
