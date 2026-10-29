@@ -404,3 +404,27 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
 - **Magnitude-aware veto + P3-25 partial TP** (6cd226f): veto now needs avg realised
   <= -5000/trade AND z <= -0.55; partial take-profit books 25% once at +8%.
 - Tests: 239 passing.
+
+## 2026-10-30 (late night) — P4-01 Short Alpha Engine (implemented, DISABLED by evidence)
+- **bot/portfolio/short_engine.py**: separate bearish pipeline S_short = wR*(-R)+wN*(-N)+wM*(-M)
+  with own weights (equal thirds baseline), own thresholds (entry 0.85 > long 0.75,
+  exit 0.40 score-decay -> COVER), modes off|hedge(risk_off only)|independent,
+  inverse-vol negative sizing (per-name <=10%, gross <= risk.max_short_gross 20%),
+  adverse stop +10% vs short entry. Held shorts kept above exit_thr; never
+  shorted merely for failing the long side; idle-cash deployer stays long-only.
+- **constructor.py**: negative targets now emit proper SHORT/resize-COVER
+  (previously a negative weight would have emitted a naked SELL — latent bug,
+  dead until now); long held in a flipped name is SOLD first.
+- **scripts/short_alpha_analysis.py**: Step-5 bucket table (score vs 5d fwd
+  returns, both tails) + Step-2 short-signal quality per threshold
+  (0.75/0.80/0.85/0.90 x 1/3/5/10d): dir accuracy, avg net, PF, maxDD, Sharpe,
+  net P&L @25bps costs. Price/volume proxies only (no historical news axis).
+- **Diagnostics verdict (2026-10-30, live server, 280d x 10 tickers)**:
+  extreme bearish tail nearly EMPTY (2 obs in [-0.85,-0.75), zero below);
+  no threshold reached n>=30 -> bearish tail does NOT predict declines net of
+  costs. Also: strongest long bucket [+0.75,+0.85) averaged -5.86% fwd (n=15,
+  inverse relationship!) — worth a future weight recalibration look.
+- **Decision: short_engine stays disabled (mode: off)** — per spec, a
+  convincing-looking negative score is not a trade. Flip strategy.short_engine
+  in YAML to run Config B (hedge) or C (independent) when more data accumulates.
+- Tests: 257 passing (+17 new).

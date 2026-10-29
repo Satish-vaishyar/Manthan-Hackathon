@@ -109,6 +109,24 @@ strategy:
       - { pct: 0.08, frac: 0.25 }
       - { pct: 0.14, frac: 0.25 }
       - { pct: 0.25, frac: 0.25 }
+  # P4-01: Short Alpha Engine — SEPARATE bearish pipeline, not a reversal of
+  # the long strategy. S_short = wR*(-R) + wN*(-N) + wM*(-M) with its own
+  # weights (equal thirds baseline — the long 25.7/33.7/40.6 weights are NOT
+  # assumed valid for shorts). Modes:
+  #   off         = Configuration A (long-only control)
+  #   hedge       = Configuration B (shorts only in risk_off regimes)
+  #   independent = Configuration C (full long-short)
+  # Enabled ONLY after scripts/short_alpha_analysis.py validates that the
+  # negative tail actually predicts negative forward returns net of costs.
+  short_engine:
+    enabled: false
+    mode: off            # off | hedge | independent
+    weights: { rank: 0.333, news: 0.333, mom: 0.334 }
+    entry_threshold: 0.85   # stricter than the long 0.75 (compare 0.75/0.80/0.85/0.90 in diagnostics)
+    exit_threshold: 0.40    # bearish-score decay -> COVER
+    adverse_stop_pct: 0.10  # hard stop: price +10% vs short entry
+    max_names: 3
+    max_weight_short: 0.10  # per-name short cap (stricter than the 20% long cap)
   # P3-24: stepped trailing SL — DISABLED 2026-10-30 after the exit-strategy
   # tournament (scripts/tune_exits.py, 744 round trips): EVERY mechanical
   # exit overlay lost money vs the native score-decay exit; stepped was the

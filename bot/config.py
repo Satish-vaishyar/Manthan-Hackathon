@@ -177,6 +177,9 @@ class StrategySettings:
     # Tournament: full TP cost -2.3L; 25%@8% costs only -30K (cheapest
     # profit-booking insurance that keeps the winners' tail).
     partial_take_profit: "PartialTakeProfitSettings" = None  # type: ignore[assignment]
+    # P4-01: Short Alpha Engine — separate bearish pipeline; off by default
+    # until diagnostics validate the negative tail (scripts/short_alpha_analysis.py).
+    short_engine: "ShortEngineSettings" = None  # type: ignore[assignment]
     # P3-24: trailing stop-loss — initial stop at entry*(1-initial_pct);
     # as price rises the stop trails the peak by trail_pct (never lowers).
     trailing_sl: "TrailingSLSettings" = None  # type: ignore[assignment]
@@ -200,6 +203,22 @@ class DisagreementGateSettings:
     |scores| exceed `threshold` (strong disagreement)."""
     enabled: bool = False
     threshold: float = 0.1
+
+
+@dataclass
+class ShortEngineSettings:
+    """P4-01: Short Alpha Engine — separate bearish pipeline (NOT a reversal
+    of the long strategy). mode: off (control) | hedge (risk_off only) |
+    independent (full long-short)."""
+    enabled: bool = False
+    mode: str = "off"                # off | hedge | independent
+    weights: dict = field(default_factory=lambda: {
+        "rank": 1.0 / 3.0, "news": 1.0 / 3.0, "mom": 1.0 / 3.0})
+    entry_threshold: float = 0.85    # stricter than the long 0.75
+    exit_threshold: float = 0.40     # bearish-score decay -> COVER
+    adverse_stop_pct: float = 0.10   # hard stop: price up 10% vs short entry
+    max_names: int = 3               # max simultaneous short names
+    max_weight_short: float = 0.10   # per-name short cap (<= long cap)
 
 
 @dataclass
@@ -524,6 +543,20 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
                 veto_z=float(tb_block.get("veto_z", -0.55) or -0.55),
                 veto_avg_rupees=float(tb_block.get("veto_avg_rupees", 5000.0) or 5000.0),
                 day_decay=float(tb_block.get("day_decay", 0.90) or 0.90),
+            )
+        se_block = strat.pop("short_engine", None)
+        if se_block is not None:
+            s.strategy.short_engine = ShortEngineSettings(
+                enabled=bool(se_block.get("enabled", False)),
+                mode=str(se_block.get("mode", "off") or "off"),
+                weights={k: float(v) for k, v in
+                         (se_block.get("weights") or
+                          {"rank": 1/3, "news": 1/3, "mom": 1/3}).items()},
+                entry_threshold=float(se_block.get("entry_threshold", 0.85) or 0.85),
+                exit_threshold=float(se_block.get("exit_threshold", 0.40) or 0.40),
+                adverse_stop_pct=float(se_block.get("adverse_stop_pct", 0.10) or 0.10),
+                max_names=int(se_block.get("max_names", 3) or 3),
+                max_weight_short=float(se_block.get("max_weight_short", 0.10) or 0.10),
             )
         ptp_block = strat.pop("partial_take_profit", None)
         if ptp_block is not None:

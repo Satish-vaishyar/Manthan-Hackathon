@@ -252,8 +252,10 @@ def build_trade_deltas(
         return PortfolioTarget()
     out = PortfolioTarget()
 
-    # Long side
+    # Long side (negative targets are handled by the short block below)
     for ticker, tgt_w in target_weights.items():
+        if tgt_w < 0:
+            continue
         price = last_close.get(ticker, 0)
         if price <= 0:
             out.skipped.append((ticker, "no_price"))
@@ -300,6 +302,46 @@ def build_trade_deltas(
             target_weight=0.0, current_weight=(cur_qty * price) / equity,
             reason="exit_target",
         ))
+
+    # Short side (P4-01 Short Alpha Engine): negative targets emit SHORT /
+    # resize COVER. A long held in a ticker that flipped bearish is SOLD
+    # first so the book never holds both sides of one name.
+    if short_allowed:
+        for ticker, tgt_w in target_weights.items():
+            if tgt_w >= 0:
+                continue
+            price = last_close.get(ticker, 0)
+            if price <= 0:
+                out.skipped.append((ticker, "no_price"))
+                continue
+            long_qty = current_holdings.get(ticker, 0)
+            if long_qty > 0:
+                out.trades.append(TradeDelta(
+                    ticker=ticker, action="SELL", qty=long_qty, price=price,
+                    target_weight=0.0, current_weight=(long_qty * price) / equity,
+                    reason="exit_target",
+                ))
+            cur_short = current_shorts.get(ticker, 0)
+            tgt_qty = int((abs(tgt_w) * equity) // price)
+            delta = tgt_qty - cur_short
+            if delta == 0:
+                out.skipped.append((ticker, "rounded_to_zero"))
+                continue
+            action = "SHORT" if delta > 0 else "COVER"
+            notional = abs(delta) * price
+            # Short ENTRIES face the full min-notional bar; risk-reducing
+            # covers are exempt (handled below via cover_exit exemption? no —
+            # partial covers here are resizes, keep the bar at half, same as
+            # any rebalance).
+            if action == "SHORT" and notional < settings.min_trade_notional:
+                out.skipped.append((ticker, f"min_notional_{notional:.0f}"))
+                continue
+            out.trades.append(TradeDelta(
+                ticker=ticker, action=action, qty=abs(delta), price=price,
+                target_weight=tgt_w,
+                current_weight=-(cur_short * price) / equity,
+                reason=f"short_weight {-(cur_short * price) / equity:.2%}->{tgt_w:.2%}",
+            ))
 
     # Shorts: only cover existing shorts whose target=0, only SHORT when short_allowed
     for ticker, short_qty in current_shorts.items():

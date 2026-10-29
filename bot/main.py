@@ -247,6 +247,11 @@ class TradingBot:
         # P3-25: per-ticker partial-TP rung stage (next rung index to fire;
         # reset when the position goes flat).
         self._ptp_stage: dict[str, int] = {}
+        # P4-01: Short Alpha Engine — separate bearish pipeline (off unless
+        # strategy.short_engine.enabled in YAML).
+        from .portfolio.short_engine import ShortAlphaEngine
+        _se_cfg = getattr(self.settings.strategy, "short_engine", None)
+        self.short_engine = ShortAlphaEngine(_se_cfg) if _se_cfg is not None else None
 
     @staticmethod
     def _load_optimized_weights(settings) -> Optional[dict[str, float]]:
@@ -1205,6 +1210,42 @@ class TradingBot:
                 getattr(self.settings.risk, "target_cash_utilization", 0.85) or 0.85
             ),
         )
+        # P4-01: Short Alpha Engine — separate bearish pipeline. Negative
+        # target weights merge into target_w; the constructor emits SHORT /
+        # resize-COVER / exit-long-first as needed. Never forced: if no
+        # candidate passes its own entry threshold, the short allocation
+        # simply stays unused (idle-cash deployer is long-only by design).
+        if self.short_engine is not None and self.short_engine.enabled:
+            se_cfg = self.short_engine.settings
+            held_shorts = {t: sp.qty for t, sp in self.ledger.shorts.items()}
+            short_sigs = self.short_engine.evaluate(
+                evals, regime=regime_label,
+                vol_fn=self.signals.volatility.vol,
+                held_shorts=held_shorts,
+                has_rank=self.signals_ensemble.rank_fn is not None,
+                has_news=self.signals_ensemble.news_fn is not None,
+                has_mom=self.signals_ensemble.mom_fn is not None,
+            )
+            # Hard adverse stop: price up >= adverse_stop_pct vs short entry
+            # -> drop the target so the constructor COVERs today.
+            stop_pct = float(getattr(se_cfg, "adverse_stop_pct", 0.10) or 0.10)
+            for t, sp in list(self.ledger.shorts.items()):
+                px = float(bundle.ticks[t].close) if t in bundle.ticks else 0.0
+                if px > 0 and sp.price > 0 and (px - sp.price) / sp.price >= stop_pct:
+                    short_sigs.pop(t, None)
+                    _log.info("short_adverse_stop", ticker=t,
+                              entry=round(sp.price, 2), px=round(px, 2),
+                              adverse_pct=round((px - sp.price) / sp.price * 100, 1),
+                              component="short_engine")
+            short_w = self.short_engine.target_weights(
+                short_sigs, equity=equity,
+                max_short_gross=float(getattr(self.settings.risk,
+                                              "max_short_gross", 0.20) or 0.20),
+                max_weight_name=self.settings.strategy.max_weight_name,
+            )
+            if short_w:
+                target_w.update(short_w)
+
         # Per-name cap is HARD (no relaxation): concentration risk outweighs
         # utilization. Clear any stale override so the static cap binds.
         self.validator.name_cap_override = None
