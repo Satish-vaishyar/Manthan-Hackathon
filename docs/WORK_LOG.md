@@ -448,3 +448,17 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   when ANY negated axis >= 0.63 (momentum is the full-range carrier); blend
   still ranks/sizes/exits (0.40 decay). Held shorts re-qualifying via entry
   are kept. 268 passing.
+- **Short pipeline end-to-end debug** (user: why no short trades) — THREE
+  separate blockers found and fixed:
+  1. **Unreachable blend threshold** (454e5b7): blend maxes at 0.355 (1,015
+     journal obs); added trigger: any_axis (entry when any negated axis
+     >= 0.63). Candidates fired immediately (DSNY/ORCX/AERX/HMDP/HAVN).
+  2. **RISK_SINGLE_SHORT silent reject** (7a57a65): risk.check_short had a
+     HARDCODED 5% per-name short cap; engine sizes at 10% -> every SHORT
+     rejected. Now risk.max_short_single (0.10, configurable).
+  3. **ShortPos.price AttributeError** (e0343f3): my adverse-stop read
+     sp.price; the field is entry_price — crashed _on_day after the first
+     fill. Fixed.
+  **First short in bot history FILLED: ORCX 1,326 @ Rs 131.54 (~1.74L).**
+  short_delta_trace instrumentation kept (4eee420) for ongoing visibility.
+  269 passing.
