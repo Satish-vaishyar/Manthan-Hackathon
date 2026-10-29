@@ -252,6 +252,8 @@ class TradingBot:
         from .portfolio.short_engine import ShortAlphaEngine
         _se_cfg = getattr(self.settings.strategy, "short_engine", None)
         self.short_engine = ShortAlphaEngine(_se_cfg) if _se_cfg is not None else None
+        # P4-02: last sim date each ticker was SOLD (re-entry cooldown).
+        self._last_sell_date: dict = {}
 
     @staticmethod
     def _load_optimized_weights(settings) -> Optional[dict[str, float]]:
@@ -914,6 +916,15 @@ class TradingBot:
             if equity <= 0 or cash <= 0:
                 return
             target_util = float(getattr(self.settings.risk, "target_cash_utilization", 0.85) or 0.85)
+            # P4-02: cap the deployer's ambition by the regime's gross-long
+            # target — otherwise it buys back to 95% every 15s while the
+            # day pipeline is trying to hold 40% in risk_off, which is the
+            # whipsaw churn that cost -3.0L in <=2d round trips.
+            if bool(getattr(self.settings.strategy, "deployer_regime_cap", True)):
+                glt = getattr(self.settings.risk, "gross_long_target", None) or {}
+                regime_now = getattr(self, "_last_regime", "neutral")
+                if regime_now in glt:
+                    target_util = min(target_util, float(glt[regime_now]))
             epsilon = float(getattr(cfg, "epsilon", 0.05) if cfg is not None else 0.05)
             # Daily order budget still applies.
             max_orders = self.settings.strategy.max_orders_per_day
@@ -927,12 +938,27 @@ class TradingBot:
             # closing part of the utilisation gap — this is what keeps
             # utilisation >80% sustained instead of oscillating 30-60%.
             _today = getattr(self, "_last_sim_date", None)
+            # P4-02: re-entry cooldown also binds the deployer — it was the
+            # prime re-buyer of just-sold names.
+            cd_days = int(getattr(self.settings.strategy,
+                                  "reentry_cooldown_days", 0) or 0)
+            cd_thr = float(getattr(self.settings.strategy,
+                                   "reentry_score_override", 0.90) or 0.90)
+            from .signals.overlays import reentry_blocked as _reentry_blocked
+
+            def _cooled_out(tk: str, sc: float) -> bool:
+                last = self._last_sell_date.get(tk)
+                if last is None or _today is None:
+                    return False
+                return _reentry_blocked((_today - last).days, cd_days, sc, cd_thr)
+
             candidates = [
                 s for s in sorted(scores, key=lambda s: s.score, reverse=True)
                 if s.ticker not in excluded and s.score > 0
                 # P3-22b: don't deploy idle cash into bandit-vetoed names.
                 and not (self.ticker_bandit is not None
                          and self.ticker_bandit.is_vetoed(s.ticker, today=_today))
+                and not _cooled_out(s.ticker, s.score)
             ]
             placed = 0
             pending_notional = 0.0
@@ -1302,6 +1328,7 @@ class TradingBot:
                 if server_h is not None:
                     server_h[t] = int(server_h.get(t, 0)) - qty
                 tp_exits.add(t)
+                self._last_sell_date[t] = bundle.simulated_date  # P4-02
 
         # P3-25: rung-ladder partial take-profit — at each configured gain
         # level (from FIFO entry), sell `frac` of the CURRENT holding; the
@@ -1355,6 +1382,8 @@ class TradingBot:
                 if server_h is not None:
                     server_h[t] = int(server_h.get(t, 0)) - qty
                 self._ptp_stage[t] = stage + 1
+                # P4-02: rung sells also start the re-entry cooldown.
+                self._last_sell_date[t] = bundle.simulated_date
 
         # P3-24: stepped trailing stop-loss (ratchets up, never lowers):
         #   peak gain < +3%  -> stop at entry - 10%
@@ -1420,10 +1449,12 @@ class TradingBot:
                 if server_h is not None:
                     server_h[t] = int(server_h.get(t, 0)) - qty
                 tp_exits.add(t)  # same no-same-day-reentry treatment
+                self._last_sell_date[t] = bundle.simulated_date  # P4-02
 
         # 5) Execute trades
         min_hold = int(getattr(self.settings.strategy, "min_hold_days", 0) or 0)
-        from .signals.overlays import passes_entry_timing, strong_disagreement
+        from .signals.overlays import (passes_entry_timing, strong_disagreement,
+                                       reentry_blocked)
         dg_cfg = getattr(self.settings.strategy, "disagreement_gate", None)
         dg_enabled = bool(dg_cfg and getattr(dg_cfg, "enabled", False))
         dg_thr = float(getattr(dg_cfg, "threshold", 0.1) or 0.1) if dg_cfg else 0.1
@@ -1453,6 +1484,27 @@ class TradingBot:
                               component="main")
                     continue
             if d.action == "BUY":
+                # P4-02: re-entry cooldown — a name SOLD within the last
+                # `reentry_cooldown_days` sim days cannot be re-bought unless
+                # its fresh score clears `reentry_score_override`. Kills the
+                # sell-today/rebuy-tomorrow whipsaw that cost -3.0L lifetime
+                # (169 trades held <=2d) while exits stay untouched.
+                cd_days = int(getattr(self.settings.strategy,
+                                      "reentry_cooldown_days", 0) or 0)
+                if cd_days > 0:
+                    last_sell = self._last_sell_date.get(d.ticker)
+                    since = ((bundle.simulated_date - last_sell).days
+                             if last_sell is not None else None)
+                    ev_cd = next((e for e in evals if e.ticker == d.ticker), None)
+                    cd_score = ev_cd.score if ev_cd is not None else 0.0
+                    if reentry_blocked(
+                            since, cd_days, cd_score,
+                            float(getattr(self.settings.strategy,
+                                          "reentry_score_override", 0.90) or 0.90)):
+                        _log.info("reentry_cooldown_blocked", ticker=d.ticker,
+                                  days_since_sell=since, score=round(cd_score, 4),
+                                  component="main")
+                        continue
                 # P3-23: never re-enter a name we took profit on today.
                 if d.ticker in tp_exits:
                     _log.info("take_profit_reentry_blocked", ticker=d.ticker,
@@ -1565,6 +1617,10 @@ class TradingBot:
                           component="main")
                 continue
             resp = await self.order_manager.submit(req, scores=scores, reasons=reasons)
+            # P4-02: remember SELLs so the re-entry cooldown can block a
+            # whipsaw re-buy of the same name within the cooldown window.
+            if d.action == "SELL" and getattr(resp, "status", "") == "FILLED":
+                self._last_sell_date[d.ticker] = bundle.simulated_date
             # P3-21: keep the server-truth caches fresh between reconciles so
             # the NEXT order in this batch is clamped against what the server
             # actually holds right now (fills change cash + positions).

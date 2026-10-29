@@ -232,6 +232,20 @@ def min_hold_allows_exit(age_days: Optional[int], min_hold_days: int,
     return age_days >= min_hold_days
 
 
+def reentry_blocked(days_since_sell: Optional[int], cooldown_days: int,
+                    score: float, score_override: float) -> bool:
+    """P4-02 re-entry cooldown. True (block the BUY) when the ticker was
+    SOLD fewer than `cooldown_days` sim days ago AND its fresh score is
+    below `score_override` — very-high-conviction re-entries still pass.
+    Unknown sell date or non-positive cooldown -> never block (fail-soft).
+    Negative days-since-sell (clock skew) -> treat as inside cooldown."""
+    if cooldown_days <= 0 or days_since_sell is None:
+        return False
+    if days_since_sell >= cooldown_days:
+        return False
+    return score < score_override
+
+
 def strong_disagreement(rank_score: float, mom_score: float,
                         threshold: float = 0.1) -> bool:
     """True when rank and mom point in OPPOSITE directions and both are

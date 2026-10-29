@@ -166,6 +166,13 @@ class StrategySettings:
     mean_reversion_in_risk_off: bool = False
     # Only BUY tickers that newly entered the top-3 today.
     fresh_entry_only: bool = False
+    # P4-02: re-entry cooldown — after SELLing a ticker, block BUY re-entry
+    # for this many sim days unless its fresh score >= reentry_score_override.
+    # Data 2026-10-30 (server orderbook): trades held <=2 sim days LOST
+    # -3.0L over 169 trades (deployer/day-pipeline whipsaw); >2d holds
+    # earned +4.7L. Attack the churn at ENTRY; exits stay untouched.
+    reentry_cooldown_days: int = 3
+    reentry_score_override: float = 0.90
     # P3-22: per-ticker RL bandit — penalise chronic losers (score multiplier
     # toward `floor`), mildly reward consistent winners (capped at `cap`).
     ticker_bandit: "TickerBanditSettings" = None  # type: ignore[assignment]
@@ -180,6 +187,10 @@ class StrategySettings:
     # P4-01: Short Alpha Engine — separate bearish pipeline; off by default
     # until diagnostics validate the negative tail (scripts/short_alpha_analysis.py).
     short_engine: "ShortEngineSettings" = None  # type: ignore[assignment]
+    # P4-02: deployer regime cap — when True, the idle-cash deployer's
+    # utilization target is capped by risk.gross_long_target[regime] so it
+    # stops fighting the regime scaler in risk_off (churn source #2).
+    deployer_regime_cap: bool = True
     # P3-24: trailing stop-loss — initial stop at entry*(1-initial_pct);
     # as price rises the stop trails the peak by trail_pct (never lowers).
     trailing_sl: "TrailingSLSettings" = None  # type: ignore[assignment]

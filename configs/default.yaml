@@ -118,6 +118,16 @@ strategy:
   #   independent = Configuration C (full long-short)
   # Enabled ONLY after scripts/short_alpha_analysis.py validates that the
   # negative tail actually predicts negative forward returns net of costs.
+  # P4-02: churn brake (2026-10-30 loss autopsy: trades held <=2 sim days
+  # LOST -3.0L over 169 trades; >2d holds earned +4.7L). Two parts:
+  #  1) re-entry cooldown: after SELLing a name, no re-BUY for 3 sim days
+  #     unless its fresh score >= 0.90 (exits are never delayed).
+  #  2) deployer regime cap: the idle-cash deployer's util target is capped
+  #     by risk.gross_long_target[regime] so it stops fighting the regime
+  #     scaler in risk_off (the whipsaw's other half).
+  reentry_cooldown_days: 3
+  reentry_score_override: 0.90
+  deployer_regime_cap: true
   short_engine:
     enabled: true
     mode: independent    # off | hedge | independent
