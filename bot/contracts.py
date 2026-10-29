@@ -148,11 +148,14 @@ class PortfolioResponse(_Base):
 class StageInfo(_Base):
     """From GET /api/v1/stage"""
     stage: Literal["development", "ready", "preflight", "simulation", "paused", "completed"]
-    interval_seconds: float
+    status: Optional[str] = None  # "running" | "paused" | "idle" | "completed"
+    interval_seconds: float = 5.0
     simulated_date: Optional[_date] = None
     total_days: Optional[int] = None
+    days_completed: Optional[int] = None
     active_dataset: Optional[str] = None
     short_selling_enabled: bool = False
+    current_date: Optional[_date] = None
 
 
 class BotStatus(_Base):

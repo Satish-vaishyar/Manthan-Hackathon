@@ -36,6 +36,8 @@ from typing import Optional
 
 import structlog
 
+import numpy as np
+
 from .config import Settings, fail_fast, load_settings
 from .contracts import (
     DayBundle,
@@ -67,6 +69,7 @@ from .portfolio.ledger import Ledger
 from .portfolio.risk import RiskManager
 from .portfolio.settlement import SettlementCalendar
 from .portfolio.tax_engine import TaxEngineConfig
+from .features import RingBuffer, build_model1_features, build_model3_features
 from .signals import SignalsBundle
 from .signals.ensemble import SignalsEnsemble
 from .signals.event_tagger import EventTagger
@@ -130,16 +133,21 @@ class TradingBot:
         # M5: market regime detector — gates gross long exposure.
         self.regime = RegimeDetector()
         self.rules_fallback = RulesFallback(tagger=self.event_tagger)
+        # P1-01: per-ticker rolling OHLCV history — feeds M1 + M3 feature
+        # windows each simulated day. 280-day window covers M1's longest
+        # 252-day lookback plus slack.
+        self.ring_buffer = RingBuffer(window=280)
         # Optional model1 (ranker) + model2 (news scorer) loaders. Failures
         # are caught -> SignalsEnsemble treats them as missing and falls back
         # to the rules sub-scorers (P0 path).
         rank_fn = self._try_build_model1_fn()
         news_fn = self._try_build_model2_fn()
+        mom_fn = self._try_build_model3_fn()
         self.signals_ensemble = SignalsEnsemble(
             settings.signals,
             rank_fn=rank_fn,
             news_fn=news_fn,
-            mom_fn=None,  # momentum is sourced from rules_fallback
+            mom_fn=mom_fn,  # momentum now has its own model3 scorer
             rules=self.rules_fallback,
         )
         self.signals = SignalsBundle(
@@ -176,20 +184,52 @@ class TradingBot:
     # we just return None and SignalsEnsemble falls back to the rules path.
     # ------------------------------------------------------------------
     def _try_build_model1_fn(self):
+        """Build a closure that scores tickers with the trained M1 CSTT ranker.
+
+        The closure uses `self.ring_buffer` to build [L=64, F=28] feature
+        windows on each call. If the ring buffer doesn't have enough history
+        (≥64 days) for a ticker, that ticker is omitted from the score dict;
+        SignalsEnsemble treats it as a missing rank sub-score and renormalizes
+        over the remaining signals (graceful degradation per docs/04 §4).
+        """
         try:
             from .models.model1_onnx import Model1Ranker, RulesRanker
             ranker = Model1Ranker()
             rules_ranker = RulesRanker()
-            if ranker.ready:
-                _log.info("model1_onnx_ready", component="main")
-                # The wrapper expects a feature_windows dict per ticker; the
-                # full wiring lands with bot.features (P1-01). For now we
-                # return the rules ranker as the live path, and a None
-                # placeholder so SignalsEnsemble keeps working.
-                # TODO(P1-01): thread bot.features.ring_buffer through here.
+            if not ranker.ready:
+                _log.info("model1_onnx_not_ready_using_rules_ranker",
+                          component="main")
                 return rules_ranker
-            _log.info("model1_onnx_not_ready_using_rules_ranker", component="main")
-            return rules_ranker
+            _log.info("model1_onnx_ready",
+                      component="main",
+                      members=ranker.n_members if hasattr(ranker, "n_members") else None)
+
+            def _rank_fn(bundle: DayBundle) -> dict[str, float]:
+                try:
+                    tickers = list(bundle.ticks.keys())
+                    if not tickers:
+                        return {}
+                    windows, ready = build_model1_features(
+                        self.ring_buffer, tickers,
+                    )
+                    if not ready:
+                        return {}
+                    feats = {t: windows[t] for t in ready}
+                    scores = ranker.score(feats, tickers=tickers)
+                    if scores:
+                        _log.info(
+                            "m1_score_computed",
+                            n_tickers=len(scores),
+                            mean=round(sum(scores.values()) / max(1, len(scores)), 6),
+                            component="main",
+                        )
+                    return scores
+                except Exception as e:  # noqa: BLE001
+                    _log.warning("model1_score_failed",
+                                 err=repr(e), component="main")
+                    return {}
+
+            return _rank_fn
         except Exception as e:  # noqa: BLE001
             _log.warning("model1_load_failed", err=repr(e), component="main")
             return None
@@ -221,6 +261,75 @@ class TradingBot:
             _log.warning("model2_load_failed", err=repr(e), component="main")
             return None
 
+    def _try_build_model3_fn(self):
+        """Build a closure that scores tickers with the trained M3 DMN momentum LSTM.
+
+        Uses `self.ring_buffer` to build [L=63, F=16] feature windows each
+        call. Tickers without enough history (≥63 days) are omitted; the
+        ensemble renormalises over remaining signals.
+        """
+        try:
+            from .models.model3_runtime import Model3Scorer
+            scorer = Model3Scorer()
+            if not scorer.ready:
+                _log.info("model3_runtime_not_ready_using_rules_mom",
+                          component="main")
+                # Build a rules-based momentum fallback that uses the ring
+                # buffer directly — same shape as Model3Scorer.score.
+                rb = self.ring_buffer
+
+                def _rules_mom_fn(bundle: DayBundle) -> dict[str, float]:
+                    out: dict[str, float] = {}
+                    for t in bundle.ticks.keys():
+                        f = rb.frame(t, n=20)
+                        if f is None or len(f) < 20:
+                            continue
+                        closes = f["close"].to_numpy(dtype=np.float64)
+                        log_c = np.log(closes)
+                        r20 = log_c[-1] - log_c[0]
+                        vol = float(np.std(np.diff(log_c))) + 1e-9
+                        z = float(r20 / (vol * np.sqrt(20.0)))
+                        out[t] = float(max(-1.0, min(1.0, z / 2.0)))
+                    return out
+
+                return _rules_mom_fn
+
+            _log.info("model3_runtime_ready",
+                      component="main",
+                      members=scorer.n_members,
+                      seq_len=scorer.meta.seq_len if scorer.meta else None,
+                      n_features=scorer.meta.n_features if scorer.meta else None)
+
+            def _mom_fn(bundle: DayBundle) -> dict[str, float]:
+                try:
+                    tickers = list(bundle.ticks.keys())
+                    if not tickers:
+                        return {}
+                    windows, ready = build_model3_features(
+                        self.ring_buffer, tickers,
+                    )
+                    if not ready:
+                        return {}
+                    feats = {t: windows[t] for t in ready}
+                    scores = scorer.score(feats)
+                    if scores:
+                        _log.info(
+                            "m3_score_computed",
+                            n_tickers=len(scores),
+                            mean=round(sum(scores.values()) / max(1, len(scores)), 6),
+                            component="main",
+                        )
+                    return scores
+                except Exception as e:  # noqa: BLE001
+                    _log.warning("model3_score_failed",
+                                 err=repr(e), component="main")
+                    return {}
+
+            return _mom_fn
+        except Exception as e:  # noqa: BLE001
+            _log.warning("model3_load_failed", err=repr(e), component="main")
+            return None
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -236,6 +345,9 @@ class TradingBot:
         await self.lifecycle.transition(BotState.DISCOVER, reason="bot.start")
         # Try to populate universe + reconcile cash once at startup
         await self._discover_universe()
+        # Warm M1 + M3 ring buffer with ~280 days of OHLCV per ticker so
+        # the trained models can produce scores from day 1.
+        await self._backfill_ring_buffer()
         await self._reconcile()
         await self.kafka.start()
         await self.assembler.start()
@@ -294,6 +406,93 @@ class TradingBot:
 
     def _expected_tickers(self) -> set[str]:
         return self._universe
+
+    # ------------------------------------------------------------------
+    # Historical backfill (P1-01) — warm M1+M3 ring buffer before trading
+    # ------------------------------------------------------------------
+    async def _backfill_ring_buffer(self) -> None:
+        """Pull ~280 days of OHLCV per ticker from /stocks/:t/history and
+        seed `self.ring_buffer`. Without this, M1 (needs 64 days) and M3
+        (needs 63 days) cannot produce scores on day 1.
+        """
+        from .features import Candle
+        from datetime import date as _date
+        from datetime import datetime as _dt
+
+        if not self._universe:
+            _log.warning("backfill_skipped_no_universe", component="main")
+            return
+
+        target_days = 280
+        ok_tickers = 0
+        total_candles = 0
+        # Sequential, rate-limited at ~2 req/s to stay under 100/min
+        for ticker in sorted(self._universe):
+            try:
+                raw = await self.api.get(
+                    f"/api/v1/stocks/{ticker}/history",
+                    params={"days": target_days},
+                )
+            except Exception as e:  # noqa: BLE001
+                _log.warning("backfill_history_failed",
+                             ticker=ticker, err=repr(e), component="main")
+                continue
+
+            # Try common shapes: {prices: [...]}, {history: [...]}, [...]
+            rows = None
+            if isinstance(raw, list):
+                rows = raw
+            elif isinstance(raw, dict):
+                for k in ("prices", "history", "data", "candles"):
+                    if k in raw and isinstance(raw[k], list):
+                        rows = raw[k]
+                        break
+                if rows is None and "ticker" in raw:
+                    # Single-day shape — treat the dict itself as the row
+                    rows = [raw]
+            if not rows:
+                _log.warning("backfill_no_rows", ticker=ticker, component="main")
+                continue
+
+            n_pushed = 0
+            for r in rows:
+                if not isinstance(r, dict):
+                    continue
+                try:
+                    d_str = r.get("date") or r.get("simulated_date")
+                    if d_str is None:
+                        continue
+                    if isinstance(d_str, str):
+                        # Handle ISO "2024-01-01" or "2024-01-01T00:00:00"
+                        d = _dt.fromisoformat(d_str.replace("Z", "+00:00")).date() \
+                            if "T" in d_str else _date.fromisoformat(d_str[:10])
+                    else:
+                        d = d_str
+                    o = float(r.get("open", 0))
+                    h = float(r.get("high", 0))
+                    lo = float(r.get("low", 0))
+                    c = float(r.get("close", 0))
+                    v = float(r.get("volume", 0))
+                    if c <= 0:
+                        continue
+                    self.ring_buffer.push_candle(ticker, Candle(
+                        date=d, open=o, high=h, low=lo, close=c, volume=v,
+                    ))
+                    n_pushed += 1
+                except Exception:  # noqa: BLE001
+                    continue
+            if n_pushed > 0:
+                ok_tickers += 1
+                total_candles += n_pushed
+            _log.info("backfill_ticker",
+                      ticker=ticker, n_candles=n_pushed, component="main")
+            # Rate-limit: ~2 req/s
+            await asyncio.sleep(0.5)
+
+        _log.info("backfill_complete",
+                  ok_tickers=ok_tickers,
+                  total_candles=total_candles,
+                  component="main")
 
     # ------------------------------------------------------------------
     # Reconciliation
@@ -432,6 +631,17 @@ class TradingBot:
 
         # 2) Feed the signals bundle's per-ticker vol state. M5 regime runs
         # below against the day's bundle directly.
+        # P1-01: push today's ticks into the rolling history before scoring
+        # so M1 + M3 have fresh features for the next day.
+        try:
+            for ticker, tick in bundle.ticks.items():
+                self.ring_buffer.push(ticker, tick, bundle.simulated_date)
+                # Populate last_close for the validator — it reads
+                # `ledger.last_close[ticker]` to compute notional.
+                self.ledger.last_close[ticker] = tick.close
+        except Exception as e:  # noqa: BLE001
+            _log.warning("ring_buffer_push_failed", err=repr(e),
+                         component="main")
         self.signals.update_volatility(bundle.simulated_date, bundle.ticks)
 
         # 3) Build scores via SignalsEnsemble (regime-gated, fail-soft).

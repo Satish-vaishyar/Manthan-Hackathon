@@ -173,10 +173,30 @@ class Lifecycle:
     # Convenience helpers for common transitions
     # ------------------------------------------------------------------
     async def on_stage_change(self, stage: StageInfo) -> None:
-        """Drive the lifecycle from a StageInfo payload."""
+        """Drive the lifecycle from a StageInfo payload.
+
+        Per docs/03 §2.2: "Trading gate OPEN iff stage == 'simulation' and
+        status == 'RUNNING' (in sandbox: stage == 'development' and status
+        == 'RUNNING', verify)." So in the sandbox (stage=development), we
+        open the trading gate immediately once we know status is RUNNING.
+        """
         cur = self.stats.state
+
+        # In sandbox mode the stage "development" IS the trading stage.
+        # Once the platform reports status=RUNNING we go straight to TRADING.
+        if stage.stage == "development" and (stage.status or "").upper() == "RUNNING":
+            if cur in (BotState.BOOT,):
+                await self.transition(BotState.DISCOVER, reason="stage_watcher_online")
+                cur = BotState.DISCOVER
+            if cur == BotState.DISCOVER:
+                await self.transition(BotState.PREFLIGHT, reason="sandbox_dev_running")
+                cur = BotState.PREFLIGHT
+            if cur == BotState.PREFLIGHT:
+                await self.transition(BotState.TRADING, reason="sandbox_dev_running")
+            return
+
         target = {
-            "development": BotState.PREFLIGHT,  # sandbox-dev = preflight style
+            "development": BotState.PREFLIGHT,
             "ready": BotState.PREFLIGHT,
             "preflight": BotState.PREFLIGHT,
             "simulation": BotState.TRADING,

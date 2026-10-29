@@ -89,8 +89,9 @@ class RiskManager:
     ) -> RiskVerdict:
         notional = qty * price
         equity = ledger.equity or 1.0
-        # Per-name cap on POST-trade weight
-        cur_w = ledger.long_market_value / equity if equity > 0 else 0
+        # Per-name cap on POST-trade weight for THIS ticker
+        cur_qty = ledger.holdings.get(ticker, 0)
+        cur_w = (cur_qty * price) / equity if equity > 0 else 0
         new_exposure = cur_w * equity + notional
         new_w = new_exposure / equity if equity > 0 else 0
         if new_w > self.settings.max_name_weight:

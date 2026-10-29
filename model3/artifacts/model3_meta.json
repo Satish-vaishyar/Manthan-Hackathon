@@ -1,0 +1,123 @@
+{
+  "model": "model3-DMN",
+  "seq_len": 63,
+  "features": [
+    "nret_1",
+    "nret_5",
+    "nret_21",
+    "nret_63",
+    "nret_126",
+    "nret_252",
+    "macd_8_24",
+    "macd_16_48",
+    "macd_32_96",
+    "cpd_mean",
+    "cpd_vol",
+    "dd_63",
+    "du_63",
+    "mkt_nret_21",
+    "mkt_nret_63",
+    "breadth_63"
+  ],
+  "vol_span": 60,
+  "sigma_target": 0.15,
+  "max_leverage": 2.0,
+  "members": [
+    {
+      "seed": 42,
+      "pt": "model3_seed42.pt",
+      "onnx": null,
+      "val": {
+        "days": 167,
+        "sharpe": 1.1553196636847811,
+        "sharpe_gross": 1.467453831359689,
+        "ann_return": 0.014020528997296054,
+        "ann_vol": 0.012135627426766826,
+        "max_drawdown": -0.008571754784069543,
+        "avg_turnover": 0.030212687215697028,
+        "avg_abs_weight": 0.16833201643204743,
+        "hit_rate": 0.5389221556886228,
+        "cost_share_of_gross": 0.21353725457191355
+      },
+      "cpu_ms_40_tickers": 5.23
+    },
+    {
+      "seed": 43,
+      "pt": "model3_seed43.pt",
+      "onnx": null,
+      "val": {
+        "days": 167,
+        "sharpe": 0.7241016782464459,
+        "sharpe_gross": 0.9292734294326161,
+        "ann_return": 0.008907603070404446,
+        "ann_vol": 0.012301591527830667,
+        "max_drawdown": -0.010531179666424547,
+        "avg_turnover": 0.020038179059431706,
+        "avg_abs_weight": 0.12075043252024421,
+        "hit_rate": 0.5688622754491018,
+        "cost_share_of_gross": 0.22084667706884187
+      },
+      "cpu_ms_40_tickers": 3.5
+    },
+    {
+      "seed": 44,
+      "pt": "model3_seed44.pt",
+      "onnx": null,
+      "val": {
+        "days": 167,
+        "sharpe": 1.3405585317644768,
+        "sharpe_gross": 1.5477405309598338,
+        "ann_return": 0.020492167017349894,
+        "ann_vol": 0.015286290401939847,
+        "max_drawdown": -0.00902269011482374,
+        "avg_turnover": 0.025256937895713684,
+        "avg_abs_weight": 0.17386633034277738,
+        "hit_rate": 0.5329341317365269,
+        "cost_share_of_gross": 0.134421788748414
+      },
+      "cpu_ms_40_tickers": 1.78
+    },
+    {
+      "seed": 45,
+      "pt": "model3_seed45.pt",
+      "onnx": null,
+      "val": {
+        "days": 167,
+        "sharpe": 1.4242465295403628,
+        "sharpe_gross": 1.748535376848805,
+        "ann_return": 0.01702076264207177,
+        "ann_vol": 0.011950713790796293,
+        "max_drawdown": -0.007999656288733033,
+        "avg_turnover": 0.030971289912088654,
+        "avg_abs_weight": 0.16424739018993012,
+        "hit_rate": 0.5209580838323353,
+        "cost_share_of_gross": 0.18651032132233528
+      },
+      "cpu_ms_40_tickers": 1.32
+    },
+    {
+      "seed": 46,
+      "pt": "model3_seed46.pt",
+      "onnx": null,
+      "val": {
+        "days": 167,
+        "sharpe": 1.3273068846676102,
+        "sharpe_gross": 1.6809413271151117,
+        "ann_return": 0.01930541609752547,
+        "ann_vol": 0.014544802201007206,
+        "max_drawdown": -0.007661233714059865,
+        "avg_turnover": 0.040814479901480426,
+        "avg_abs_weight": 0.2270633052978467,
+        "hit_rate": 0.5269461077844312,
+        "cost_share_of_gross": 0.21034914654539869
+      },
+      "cpu_ms_40_tickers": 1.26
+    }
+  ],
+  "outputs": {
+    "position": "trend-following position signal in [-1, 1] (average the members)",
+    "p_trend_up": "P(next 21-day return > 0)",
+    "target_weight": "position * min(sigma_target/sqrt(252)/sigma_t, max_leverage)",
+    "momentum_regime": "mean position across the live universe (market trend gauge)"
+  }
+}

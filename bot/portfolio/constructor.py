@@ -88,10 +88,13 @@ def inverse_vol_weights(
         share = excess / len(non_capped)
         for t in non_capped:
             weights[t] += share
-    # Renormalise after capping
-    total = sum(weights.values())
-    if total > 0:
-        weights = {t: w / total for t, w in weights.items()}
+    # Final cap sweep — anything still above max_weight gets clipped. The
+    # gross_long_target applied by build_target_weights then scales the
+    # total to regime target (0.92 / 0.75 / 0.40) so the per-name cap
+    # invariant is what protects us from single-name concentration.
+    for t, w in list(weights.items()):
+        if w > max_weight:
+            weights[t] = max_weight
     return weights
 
 
