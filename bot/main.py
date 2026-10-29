@@ -1257,11 +1257,12 @@ class TradingBot:
             stop_pct = float(getattr(se_cfg, "adverse_stop_pct", 0.10) or 0.10)
             for t, sp in list(self.ledger.shorts.items()):
                 px = float(bundle.ticks[t].close) if t in bundle.ticks else 0.0
-                if px > 0 and sp.price > 0 and (px - sp.price) / sp.price >= stop_pct:
+                entry = float(getattr(sp, "entry_price", 0.0) or 0.0)
+                if px > 0 and entry > 0 and (px - entry) / entry >= stop_pct:
                     short_sigs.pop(t, None)
                     _log.info("short_adverse_stop", ticker=t,
-                              entry=round(sp.price, 2), px=round(px, 2),
-                              adverse_pct=round((px - sp.price) / sp.price * 100, 1),
+                              entry=round(entry, 2), px=round(px, 2),
+                              adverse_pct=round((px - entry) / entry * 100, 1),
                               component="short_engine")
             short_w = self.short_engine.target_weights(
                 short_sigs, equity=equity,
