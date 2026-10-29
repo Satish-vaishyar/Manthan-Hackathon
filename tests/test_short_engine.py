@@ -183,7 +183,7 @@ def test_short_engine_block_parsed_from_yaml() -> None:
     # live-enabled in independent mode (user request 2026-10-30); strict
     # 0.85 entry threshold + tight caps keep it a low-exposure module
     assert se.enabled is True and se.mode == "independent"
-    assert se.entry_threshold == pytest.approx(0.85)
+    assert se.entry_threshold == pytest.approx(0.63)  # user spec 2026-10-30
     assert se.exit_threshold == pytest.approx(0.40)
     assert se.adverse_stop_pct == pytest.approx(0.10)
     assert se.max_names == 3
