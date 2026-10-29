@@ -1,0 +1,14 @@
+# sandbox overrides for default.yaml — Manthan 2026 sandbox environment.
+# Inherits everything from default.yaml; only deviations listed here.
+
+env: sandbox
+server_ip: 192.168.65.157
+
+# 10 active Kafka tickers + max 4 orders/day matches the docs.
+strategy:
+  top_k: 8
+  max_orders_per_day: 4
+
+# Sandbox interval is currently 5s per docs/data README.
+timing:
+  stage_poll_simulation_s: 15.0

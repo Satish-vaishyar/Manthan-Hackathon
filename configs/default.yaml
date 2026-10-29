@@ -1,0 +1,59 @@
+env: sandbox
+server_ip: ${SERVER_IP}
+team_username: ${TEAM_USERNAME}
+
+kafka:
+  port: 9094
+  consumers: 1
+  topics: [market.ticks, market.news]
+  auto_offset_reset: latest
+  enable_auto_commit: false
+
+api:
+  port: 3002
+  timeout_s: 1.5
+  rate_per_min: 100
+
+timing:
+  news_window_ms: 400
+  hard_deadline_ms: 800
+  heartbeat_interval_s: 10.0
+  stage_poll_preflight_s: 2.5
+  stage_poll_simulation_s: 30.0
+
+strategy:
+  weights: { rank: 0.45, news: 0.35, mom: 0.20 }
+  top_k: 8
+  max_weight_name: 0.15
+  rebalance_threshold: 0.025
+  min_trade_notional: 50000
+  max_orders_per_day: 4
+  event_long_threshold: 0.6
+  event_short_threshold: -0.6
+
+risk:
+  stop_atr_mult: 2.5
+  dd_soft: 0.08
+  dd_hard: 0.15
+  cash_buffer: 0.05
+  max_short_gross: 0.20
+  max_name_weight: 0.15
+  max_sector_weight: 0.30
+  gross_long_target: { risk_on: 0.92, neutral: 0.75, risk_off: 0.40 }
+
+tax:
+  ltcg_wait_days: 30
+  harvest_window_days: 10
+  min_tax_saving: 70
+  brokerage_per_order: 20.0
+  dp_charge_per_sell: 15.34
+  stcg_rate: 0.15
+  ltcg_rate: 0.10
+  ltcg_exemption: 100000
+  fy_start_month: 4
+  fy_start_day: 1
+  st_lt_boundary_days: 365
+
+settlement:
+  interval_trading_days: 10
+  force_close_before_days: 2

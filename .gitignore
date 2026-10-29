@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Bot run artefacts (per docs/10 §1)
+runs/
+data/raw/
+data/history/
+data/features.parquet
+
+# Models (large — share via git-lfs or shared drive)
+models/*.pt
+models/*.onnx
+models/*.bin
+models/*.meta.json
+!models/.gitkeep
+
+# Wheel cache (per docs/10 §2)
+wheels/*.whl
+!wheels/.gitkeep
+
+# Local JWT / secrets
+.env
+*.jwt
+jwt.txtdata/data/
+model*/data/processed/
+model*/data/raw/
+*.npz
+__pycache__/
+.pytest_cache/
+*.pyc

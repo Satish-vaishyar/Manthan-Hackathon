@@ -1,0 +1,24 @@
+# live overrides — final hour, no overrides of strategy aggressiveness
+# without team-lead approval.
+
+env: live
+server_ip: ${SERVER_IP}
+
+kafka:
+  consumers: 4   # max parallelism (10 partitions, 10 max useful)
+
+api:
+  rate_per_min: 110   # push closer to 120 hard cap during the live hour
+
+timing:
+  stage_poll_simulation_s: 30.0
+
+strategy:
+  top_k: 10
+  max_orders_per_day: 4
+
+# Tighter risk for the live run
+risk:
+  dd_soft: 0.06
+  dd_hard: 0.12
+  max_short_gross: 0.15
