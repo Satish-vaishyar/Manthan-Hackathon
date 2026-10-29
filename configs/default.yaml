@@ -86,14 +86,13 @@ strategy:
   # trailing stop books max possible profit: winners run past +10% while
   # the stop ratchets up behind them).
   take_profit_pct: 0.0
-  # P3-24: STEPPED trailing stop-loss (user-spec 2026-10-30), ratchets up
-  # only, computed off the peak close since entry:
-  #   gain < +3%   -> SL at entry - 10%
-  #   gain >= +3%  -> SL at buy price (breakeven)
-  #   gain >= +5%  -> SL at buy + 3%
-  #   gain >= +7%  -> SL at buy + 5%   ... always 2% locked behind the peak.
+  # P3-24: stepped trailing SL — DISABLED 2026-10-30 after the exit-strategy
+  # tournament (scripts/tune_exits.py, 744 round trips): EVERY mechanical
+  # exit overlay lost money vs the native score-decay exit; stepped was the
+  # worst (-4.8L, 217 shake-outs — 2% steps are tighter than these stocks'
+  # daily noise). Code kept for easy re-enable with wider steps.
   trailing_sl:
-    enabled: true
+    enabled: false
     initial_pct: 0.10
     breakeven_trigger_pct: 0.03
     lock_start_pct: 0.05

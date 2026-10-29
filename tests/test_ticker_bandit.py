@@ -77,7 +77,9 @@ def test_take_profit_knob_from_yaml() -> None:
 def test_trailing_sl_block_parsed() -> None:
     s = load_settings("configs/default.yaml")
     tsl = s.strategy.trailing_sl
-    assert tsl is not None and tsl.enabled is True
+    # Disabled after the exit tournament (runs/_exit_tournament.md): every
+    # mechanical exit overlay lost money vs native score-decay exits.
+    assert tsl is not None and tsl.enabled is False
     assert tsl.initial_pct == pytest.approx(0.10)
     assert tsl.breakeven_trigger_pct == pytest.approx(0.03)
     assert tsl.lock_start_pct == pytest.approx(0.05)
