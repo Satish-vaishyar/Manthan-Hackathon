@@ -44,17 +44,17 @@ strategy:
   exit_min_notional: 5000
   max_orders_per_day: 8  # was 4: deployment took multiple sim days; churn now controlled by min_hold_days
   # Higher conviction bar — fewer low-conv BLUX-style churn trades.
-  event_long_threshold: 0.80  # iter-3: 0.90 starved the book (1 long, utilization collapsed)
+  event_long_threshold: 0.75  # restored: iter-2/3 proved higher bars starve the book
   event_short_threshold: -0.75
   # BLUX: 22 trades, 45.5% win-rate, −₹27,071 over 18mo — blacklist.
   # HMDP: only lifetime-loser ticker AND −₹82K in tuning iter-1.
   # SONA: −₹37K in iter-1, structurally weak recently.
-  exclude_tickers: [BLUX, HMDP, SONA, ORCX]  # ORCX: -190K across iters 1-2 (regime-broken; revisit when regime flips)
+  exclude_tickers: [BLUX]  # restored: iter-2/3 exclusions were regime-specific overfitting
   # P3-15: opt-in RL tuner — UCB1 bandit over weight triples. Disabled by
   # default; enable to let the bot adapt weights online based on realised
   # per-day equity delta. See bot/portfolio/rl_tuner.py for the algo.
   rl_tuner:
-    enabled: false  # was true: warmup arm {rank .65} is the P&L-proven loser; pin weights
+    enabled: true  # restored after live A/B: pinning weights performed no better
     update_every_trades: 10
     exploration_c: 1.4
     warmup_trades: 20
@@ -79,7 +79,7 @@ strategy:
   # Minimum holding period: SELL/COVER skipped for lots younger than this
   # many sim days (stop-loss + settlement-guard exits exempt). Scalp churn
   # (<3d holds) lost Rs 13K in the tradebook post-mortem. 0 disables.
-  min_hold_days: 7  # was 3; 0-3d scalps lost 93K in the recent era (stop-loss exits remain exempt)
+  min_hold_days: 0  # OFF: early-era scalps were +13.9K; min_hold destroyed the 2:1 win/loss asymmetry
   # Universe-relative entry timing: BUY allowed only if the ticker is in the
   # day's top-2 ensemble scores AND >= its own 20-sim-day median score
   # (median of available days once >= 3; fewer -> gate no-ops).
@@ -114,7 +114,7 @@ strategy:
 
 risk:
   # Wider ATR stop so we don't get shaken out of mid-band winners on 1-2d dips.
-  stop_atr_mult: 2.0  # tune_stops.py: +45.7K vs 3.5; cuts losers sooner
+  stop_atr_mult: 3.5  # restored: 2.0 cut winners along with losers in live test
   # Less aggressive de-risking — 0.08 was tripping on noise.
   dd_soft: 0.12
   dd_hard: 0.15

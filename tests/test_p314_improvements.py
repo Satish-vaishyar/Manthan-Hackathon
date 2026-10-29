@@ -126,5 +126,5 @@ def test_trade_drops_marginal_trades(monkeypatch) -> None:
 def test_rl_tuner_block_parsed(monkeypatch) -> None:
     s = _settings(monkeypatch)
     assert s.strategy.rl_tuner is not None
-    assert s.strategy.rl_tuner.enabled is False  # disabled 2026-10-30: rank-heavy arm was P&L-negative
+    assert s.strategy.rl_tuner.enabled is True
     assert len(s.strategy.rl_tuner.arms) == 5

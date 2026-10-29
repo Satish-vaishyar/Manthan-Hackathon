@@ -70,7 +70,7 @@ def test_config_defaults_are_disabled() -> None:
 def test_config_yaml_loads_improvements(monkeypatch) -> None:
     s = _settings(monkeypatch)
     assert s.strategy.mom_horizon_weights == {"d5": 0.3, "d10": 0.4, "d20": 0.3}
-    assert s.strategy.min_hold_days == 7  # raised 2026-10-30: 0-3d scalps lost 93K
+    assert s.strategy.min_hold_days == 0  # YAML-disabled after live A/B (destroyed win/loss asymmetry)
     assert s.strategy.entry_timing is not None
     # Disabled by default since 2026-10-30 (live diag: starved 100% of
     # entries on the 10-name universe -> zero order flow). Feature stays

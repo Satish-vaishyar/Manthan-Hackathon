@@ -22,15 +22,15 @@ def test_strategy_weights_from_yaml(monkeypatch) -> None:
     # Default.yaml fine-tune (2026-10-29) sets these.
     assert s.strategy.weights == {"rank": 0.55, "news": 0.20, "mom": 0.25}
     assert s.strategy.top_k == 8  # raised 2026-10-30: 6 under-filled the 10-name book
-    assert s.strategy.event_long_threshold == pytest.approx(0.80)  # iter-3
+    assert s.strategy.event_long_threshold == pytest.approx(0.75)
     assert s.strategy.event_short_threshold == pytest.approx(-0.75)
     assert s.strategy.rebalance_threshold == pytest.approx(0.05)
-    assert s.strategy.exclude_tickers == ["BLUX", "HMDP", "SONA", "ORCX"]  # iter-3
+    assert s.strategy.exclude_tickers == ["BLUX"]
 
 
 def test_risk_settings_from_yaml(monkeypatch) -> None:
     s = _make_settings(monkeypatch)
-    assert s.risk.stop_atr_mult == pytest.approx(2.0)  # tuned 2026-10-30
+    assert s.risk.stop_atr_mult == pytest.approx(3.5)
     assert s.risk.dd_soft == pytest.approx(0.12)
     assert s.risk.max_consecutive_loss_pause == 0  # disabled by default
 
