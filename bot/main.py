@@ -241,6 +241,9 @@ class TradingBot:
         self._tasks: list[asyncio.Task] = []
         self._universe: set[str] = set()
         self._sector_of: dict[str, str] = {}
+        # P3-24: peak close per long ticker since entry (trailing SL). Seeded
+        # lazily at first sight each day; entries dropped when flat.
+        self._trail_peak: dict[str, float] = {}
 
     @staticmethod
     def _load_optimized_weights(settings) -> Optional[dict[str, float]]:
@@ -1186,6 +1189,62 @@ class TradingBot:
                 if server_h is not None:
                     server_h[t] = int(server_h.get(t, 0)) - qty
                 tp_exits.add(t)
+
+        # P3-24: trailing stop-loss — stop = max(entry*(1-initial_pct),
+        # peak_since_entry*(1-trail_pct)); ratchets UP only. Books the max
+        # possible profit: losers are cut at -10%, winners keep running
+        # until they give back `trail_pct` from their peak.
+        tsl_cfg = getattr(self.settings.strategy, "trailing_sl", None)
+        if tsl_cfg is not None and bool(getattr(tsl_cfg, "enabled", False)) \
+                and not self.settings.dry_run:
+            init_pct = float(getattr(tsl_cfg, "initial_pct", 0.10) or 0.10)
+            trail_pct = float(getattr(tsl_cfg, "trail_pct", 0.05) or 0.05)
+            for t in list(self._trail_peak):
+                if not self.ledger.lots.get(t):
+                    del self._trail_peak[t]  # flat — reset the trail
+            for t, lots in list(self.ledger.lots.items()):
+                if not lots or t not in bundle.ticks or t in tp_exits:
+                    continue
+                entry = float(lots[0].price)
+                px = float(bundle.ticks[t].close)
+                if entry <= 0 or px <= 0:
+                    continue
+                peak = max(float(self._trail_peak.get(t, entry)), px)
+                self._trail_peak[t] = peak
+                # Initial stop at -initial_pct from entry; the trail leg
+                # engages only once price has exceeded entry (otherwise
+                # entry*(1-trail_pct) would be TIGHTER than the initial
+                # stop and cut positions at -5% instead of -10%).
+                stop = entry * (1.0 - init_pct)
+                if peak > entry:
+                    stop = max(stop, peak * (1.0 - trail_pct))
+                if px > stop:
+                    continue
+                qty = sum(int(l.qty) for l in lots)
+                server_h = getattr(self, "_server_holdings", None)
+                if server_h is not None:
+                    qty = min(qty, max(0, int(server_h.get(t, 0))))
+                if qty <= 0:
+                    continue
+                remaining_ts = await self.lifecycle.gate.orders_remaining(max_orders)
+                if remaining_ts <= 1:
+                    break
+                _log.info("trailing_sl_exit", ticker=t, qty=qty,
+                          entry=round(entry, 2), peak=round(peak, 2),
+                          px=round(px, 2), stop=round(stop, 2),
+                          pnl_pct=round((px - entry) / entry * 100, 1),
+                          component="main")
+                await self.order_manager.submit(
+                    OrderRequest(ticker=t, action="SELL", quantity=qty,
+                                 date=bundle.simulated_date,
+                                 reason=f"trailing_sl peak={peak:.2f} stop={stop:.2f}"),
+                    scores={"ensemble": 0.0},
+                    reasons=["trailing_sl", f"regime={regime_label}"],
+                )
+                await self.lifecycle.gate.record_order()
+                if server_h is not None:
+                    server_h[t] = int(server_h.get(t, 0)) - qty
+                tp_exits.add(t)  # same no-same-day-reentry treatment
 
         # 5) Execute trades
         min_hold = int(getattr(self.settings.strategy, "min_hold_days", 0) or 0)

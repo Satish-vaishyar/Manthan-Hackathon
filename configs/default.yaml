@@ -82,10 +82,17 @@ strategy:
     floor: 0.5
     cap: 1.15
     min_obs: 2
-  # P3-23: take-profit — SELL any long up >=10% from FIFO entry. Winners
-  # were riding 30+ days and round-tripping back to losses while losers
-  # exited fast; lock the gain instead. Same-day re-entry is blocked.
-  take_profit_pct: 0.10
+  # P3-23: take-profit — DISABLED, superseded by trailing_sl below (the
+  # trailing stop books max possible profit: winners run past +10% while
+  # the stop ratchets up behind them).
+  take_profit_pct: 0.0
+  # P3-24: trailing stop-loss — initial stop at -10% from entry; as profit
+  # grows the stop trails the peak close by 5% and never lowers. Losers cut
+  # at -10%, winners run until they give back 5% from their peak.
+  trailing_sl:
+    enabled: true
+    initial_pct: 0.10
+    trail_pct: 0.05
   # --- Strategy improvements (2026-10-29) — each individually disable-able ---
   # Multi-horizon momentum blend: 5d/10d/20d vol-normalised log-return
   # z-scores replace the single-horizon mom sub-score. Remove the block (or

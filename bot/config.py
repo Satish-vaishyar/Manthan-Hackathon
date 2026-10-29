@@ -172,6 +172,9 @@ class StrategySettings:
     # P3-23: take-profit — SELL a long whose unrealised gain from FIFO entry
     # reaches this fraction (0 disables). 0.10 = lock in +10% winners.
     take_profit_pct: float = 0.0
+    # P3-24: trailing stop-loss — initial stop at entry*(1-initial_pct);
+    # as price rises the stop trails the peak by trail_pct (never lowers).
+    trailing_sl: "TrailingSLSettings" = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -192,6 +195,19 @@ class DisagreementGateSettings:
     |scores| exceed `threshold` (strong disagreement)."""
     enabled: bool = False
     threshold: float = 0.1
+
+
+@dataclass
+class TrailingSLSettings:
+    """Trailing stop-loss for longs.
+
+    stop = max(entry*(1 - initial_pct), peak_since_entry*(1 - trail_pct))
+    The stop ratchets UP as price makes new highs and never lowers, so a
+    winner keeps running while progressively more profit is locked in.
+    Exit when the day's close <= stop."""
+    enabled: bool = False
+    initial_pct: float = 0.10
+    trail_pct: float = 0.05
 
 
 @dataclass
@@ -469,6 +485,13 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
                 floor=float(tb_block.get("floor", 0.5) or 0.5),
                 cap=float(tb_block.get("cap", 1.15) or 1.15),
                 min_obs=int(tb_block.get("min_obs", 2) or 2),
+            )
+        ts_block = strat.pop("trailing_sl", None)
+        if ts_block is not None:
+            s.strategy.trailing_sl = TrailingSLSettings(
+                enabled=bool(ts_block.get("enabled", False)),
+                initial_pct=float(ts_block.get("initial_pct", 0.10) or 0.10),
+                trail_pct=float(ts_block.get("trail_pct", 0.05) or 0.05),
             )
         if "mom_horizon_weights" in (merged.get("strategy") or {}):
             mhw = merged["strategy"].get("mom_horizon_weights")
