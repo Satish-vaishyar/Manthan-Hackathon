@@ -230,6 +230,9 @@ class TickerBanditSettings:
     floor: float = 0.5
     cap: float = 1.15
     min_obs: int = 2
+    veto_pulls: int = 5    # hard-BUY-veto after this many realised trades
+    veto_z: float = -0.55  # ...when edge z <= this (strongly negative)
+    day_decay: float = 0.90  # EMA decay per quiet sim day (self-healing)
 
 
 @dataclass
@@ -492,6 +495,9 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
                 floor=float(tb_block.get("floor", 0.5) or 0.5),
                 cap=float(tb_block.get("cap", 1.15) or 1.15),
                 min_obs=int(tb_block.get("min_obs", 2) or 2),
+                veto_pulls=int(tb_block.get("veto_pulls", 5) or 5),
+                veto_z=float(tb_block.get("veto_z", -0.55) or -0.55),
+                day_decay=float(tb_block.get("day_decay", 0.90) or 0.90),
             )
         ts_block = strat.pop("trailing_sl", None)
         if ts_block is not None:

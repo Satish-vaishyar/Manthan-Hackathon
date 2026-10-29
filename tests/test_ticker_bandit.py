@@ -50,6 +50,39 @@ def test_disabled_bandit_is_neutral() -> None:
     assert b.multiplier("AAA") == 1.0
 
 
+def test_veto_after_consistent_losses() -> None:
+    import datetime as dt
+    b = _bandit()
+    day = dt.date(2026, 1, 1)
+    for i in range(6):
+        b.observe("AAA", -10_000, day=day + dt.timedelta(days=i))
+    assert b.is_vetoed("AAA", today=day + dt.timedelta(days=6)) is True
+    # Not enough history -> no veto.
+    assert b.is_vetoed("BBB", today=day) is False
+
+
+def test_veto_self_heals_with_quiet_days() -> None:
+    import datetime as dt
+    b = _bandit(day_decay=0.5)  # fast decay for the test
+    day = dt.date(2026, 1, 1)
+    for i in range(6):
+        b.observe("AAA", -10_000, day=day + dt.timedelta(days=i))
+    # Vetoed on the last fill day (evidence fresh).
+    assert b.is_vetoed("AAA", today=day + dt.timedelta(days=5)) is True
+    # Quiet days decay the evidence (0.5^9 ~ 0.002): the veto lifts, unlike
+    # a static blacklist — the ticker re-earns eligibility by going quiet.
+    assert b.is_vetoed("AAA", today=day + dt.timedelta(days=14)) is False
+
+
+def test_veto_not_triggered_by_winners() -> None:
+    import datetime as dt
+    b = _bandit()
+    day = dt.date(2026, 1, 1)
+    for i in range(8):
+        b.observe("AAA", +5_000, day=day + dt.timedelta(days=i))
+    assert b.is_vetoed("AAA", today=day + dt.timedelta(days=8)) is False
+
+
 def test_config_block_parsed(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("BOT_ACCESS_TOKEN", "x")
     monkeypatch.setenv("TEAM_USERNAME", "t")

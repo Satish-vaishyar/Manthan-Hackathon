@@ -268,13 +268,15 @@ class OrderManager:
         elif resp.action == "SELL":
             res = self.ledger.apply_sell(resp.ticker, resp.quantity, resp.price, resp.date, b, d)
             if self.ticker_bandit is not None:
-                self.ticker_bandit.observe(resp.ticker, float(res.get("realised", 0.0)))
+                self.ticker_bandit.observe(resp.ticker, float(res.get("realised", 0.0)),
+                                           day=resp.date)
         elif resp.action == "SHORT":
             self.ledger.apply_short(resp.ticker, resp.quantity, resp.price, resp.date, b, d)
         elif resp.action == "COVER":
             res = self.ledger.apply_cover(resp.ticker, resp.quantity, resp.price, resp.date, b, d)
             if self.ticker_bandit is not None:
-                self.ticker_bandit.observe(resp.ticker, float(res.get("realised", 0.0)))
+                self.ticker_bandit.observe(resp.ticker, float(res.get("realised", 0.0)),
+                                           day=resp.date)
 
     # ------------------------------------------------------------------
     # Journal helpers

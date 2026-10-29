@@ -855,8 +855,14 @@ class TradingBot:
             # per-name cap. Up to `remaining` buys per reconcile, each
             # closing part of the utilisation gap — this is what keeps
             # utilisation >80% sustained instead of oscillating 30-60%.
-            candidates = [s for s in sorted(scores, key=lambda s: s.score, reverse=True)
-                          if s.ticker not in excluded and s.score > 0]
+            _today = getattr(self, "_last_sim_date", None)
+            candidates = [
+                s for s in sorted(scores, key=lambda s: s.score, reverse=True)
+                if s.ticker not in excluded and s.score > 0
+                # P3-22b: don't deploy idle cash into bandit-vetoed names.
+                and not (self.ticker_bandit is not None
+                         and self.ticker_bandit.is_vetoed(s.ticker, today=_today))
+            ]
             placed = 0
             pending_notional = 0.0
             for best in candidates:
@@ -1290,6 +1296,15 @@ class TradingBot:
                 # P3-23: never re-enter a name we took profit on today.
                 if d.ticker in tp_exits:
                     _log.info("take_profit_reentry_blocked", ticker=d.ticker,
+                              component="main")
+                    continue
+                # P3-22b: bandit hard-veto — chronically losing tickers
+                # (>=veto_pulls realised trades, edge z <= veto_z) get no
+                # new BUYs. Self-heals via day_decay (not a static blacklist).
+                if self.ticker_bandit is not None and self.ticker_bandit.is_vetoed(
+                        d.ticker, today=bundle.simulated_date):
+                    _log.info("ticker_bandit_veto", ticker=d.ticker,
+                              stats=self.ticker_bandit.stats()["tickers"].get(d.ticker),
                               component="main")
                     continue
                 ev_gate = next((e for e in evals if e.ticker == d.ticker), None)

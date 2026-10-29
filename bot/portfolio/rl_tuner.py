@@ -207,25 +207,72 @@ class TickerBandit:
     cap: float = 1.15
     min_obs: int = 2
     enabled: bool = True
+    # Hard veto: after `veto_pulls` realised trades with edge z <= `veto_z`,
+    # new BUYs in the ticker are blocked entirely. Self-healing: the EMAs
+    # decay by `day_decay` per sim day without a fill, so a ticker that goes
+    # quiet re-earns eligibility (unlike a static blacklist).
+    veto_pulls: int = 5
+    veto_z: float = -0.55
+    day_decay: float = 0.90
 
     _ema: dict[str, float] = field(default_factory=dict)
     _ema_abs: dict[str, float] = field(default_factory=dict)
-    _pulls: dict[str, int] = field(default_factory=dict)
+    # float: decays with quiet days so stale evidence expires (veto lifts)
+    _pulls: dict[str, float] = field(default_factory=dict)
+    _last_day: dict[str, object] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def observe(self, ticker: str, realised_pnl: float) -> None:
+    def observe(self, ticker: str, realised_pnl: float, day=None) -> None:
         if not self.enabled:
             return
         pnl = float(realised_pnl)
         a = float(self.ema_alpha)
         with self._lock:
+            if day is not None:
+                self._decay_locked(day, exclude=ticker)
+                self._last_day[ticker] = day
             self._ema[ticker] = (1 - a) * self._ema.get(ticker, 0.0) + a * pnl
             self._ema_abs[ticker] = (1 - a) * self._ema_abs.get(ticker, 0.0) + a * abs(pnl)
-            self._pulls[ticker] = self._pulls.get(ticker, 0) + 1
+            self._pulls[ticker] = self._pulls.get(ticker, 0.0) + 1
             _log.info("ticker_bandit_observe", ticker=ticker,
-                      realised=round(pnl, 0), pulls=self._pulls[ticker],
+                      realised=round(pnl, 0), pulls=round(self._pulls[ticker], 1),
                       mult=round(self._multiplier_locked(ticker), 3),
                       component="ticker_bandit")
+
+    def _decay_locked(self, today, exclude: str = "") -> None:
+        """Age each QUIET ticker's evidence by day_decay^(days since its last
+        fill). The ticker being observed right now is excluded — a fill on
+        consecutive days must not decay its own evidence."""
+        for t, last in list(self._last_day.items()):
+            if t == exclude:
+                continue
+            try:
+                gap = max((today - last).days, 0)
+            except TypeError:
+                continue
+            if gap <= 0:
+                continue
+            f = float(self.day_decay) ** gap
+            # Decay the EVIDENCE (pulls) — z = ema/ema_abs is scale-invariant,
+            # so decaying magnitudes alone would never lift a veto.
+            self._pulls[t] = self._pulls.get(t, 0.0) * f
+            self._last_day[t] = today
+
+    def is_vetoed(self, ticker: str, today=None) -> bool:
+        """True when the ticker has enough history AND a strongly negative
+        edge: block its BUYs (the score multiplier floor alone is not
+        enough when the raw score is 2x the entry threshold)."""
+        if not self.enabled:
+            return False
+        with self._lock:
+            if today is not None:
+                self._decay_locked(today)
+            if self._pulls.get(ticker, 0) < self.veto_pulls:
+                return False
+            ema = self._ema.get(ticker, 0.0)
+            ema_abs = self._ema_abs.get(ticker, 0.0)
+            z = ema / (ema_abs + 1e-9)
+            return z <= self.veto_z
 
     def multiplier(self, ticker: str) -> float:
         if not self.enabled:
@@ -265,6 +312,9 @@ def build_bandit_from_settings(strategy_settings) -> Optional[TickerBandit]:
         floor=float(getattr(cfg, "floor", 0.5) or 0.5),
         cap=float(getattr(cfg, "cap", 1.15) or 1.15),
         min_obs=int(getattr(cfg, "min_obs", 2) or 2),
+        veto_pulls=int(getattr(cfg, "veto_pulls", 5) or 5),
+        veto_z=float(getattr(cfg, "veto_z", -0.55) or -0.55),
+        day_decay=float(getattr(cfg, "day_decay", 0.90) or 0.90),
         enabled=True,
     )
 

@@ -82,6 +82,13 @@ strategy:
     floor: 0.5
     cap: 1.15
     min_obs: 2
+    # Hard BUY-veto: >=6 realised trades with edge z <= -0.55 blocks new
+    # BUYs (lifetime bleeders: SONA -2.4L/129 trades, DSNY -1.4L, ORCX -1.1L).
+    # Self-heals: EMA decays 0.90/quiet sim day, so a reformed ticker
+    # re-earns eligibility — unlike the static blacklist (regime overfit).
+    veto_pulls: 5  # decayed count; ~5 recent realised trades
+    veto_z: -0.55
+    day_decay: 0.90
   # P3-23: take-profit — DISABLED, superseded by trailing_sl below (the
   # trailing stop books max possible profit: winners run past +10% while
   # the stop ratchets up behind them).
