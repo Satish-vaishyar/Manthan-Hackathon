@@ -188,6 +188,17 @@ def build_target_weights(
     elif total_weight > 0 and current_util <= 0 and target_util > 0:
         weights = {t: w * (target_util / max(total_weight, 1e-9))
                    for t, w in weights.items()}
+    # Re-apply a per-name cap AFTER utilization scaling (the scale-up above
+    # can push a name far past max_weight_name — observed live: a single
+    # 95%-of-equity order that failed to fill). When fewer names qualify
+    # than the static cap needs to reach the target (e.g. 2 names * 20% cap
+    # = 40% max vs 95% target), relax the cap to target_util / n_names so
+    # cash actually deploys; with enough names the static cap binds.
+    if weights:
+        n = len(weights)
+        static_cap = float(getattr(settings, "max_weight_name", 1.0) or 1.0)
+        cap = min(1.0, max(static_cap, target_util / max(n, 1)))
+        weights = {t: min(w, cap) for t, w in weights.items()}
     return weights
 
 
