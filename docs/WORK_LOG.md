@@ -439,3 +439,5 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   [regime] (it was buying to 95% in risk_off while the book targeted 40%).
   MOTR -68K recent is the worst name; bandit will re-veto after 5 fresh
   losses (magnitude guard). 263 passing.
+- **Short threshold 0.63** (9b6a866, user spec): entry_threshold 0.85 -> 0.63
+  so the bearish engine trades more often; exits/caps/budget unchanged.
