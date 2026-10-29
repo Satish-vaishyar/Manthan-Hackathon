@@ -83,12 +83,16 @@ class SignalsEnsemble:
                  rank_fn: Optional[RankFn] = None,
                  news_fn: Optional[NewsFn] = None,
                  mom_fn: Optional[MomFn] = None,
-                 rules: Optional[RulesFallback] = None) -> None:
+                 rules: Optional[RulesFallback] = None,
+                 vol_fn: Optional[Callable[[str], float]] = None) -> None:
         self.settings = settings
         self.rules = rules or RulesFallback()
         self.rank_fn = rank_fn
         self.news_fn = news_fn
         self.mom_fn = mom_fn
+        # Volatility-scaled conviction (signals.vol_scale_scores): divides
+        # the final regime-adjusted score by realized vol before ranking.
+        self.vol_fn = vol_fn
 
     # ------------------------------------------------------------------
     def _safe(self, fn_name: str, fn, bundle: DayBundle) -> dict[str, float]:
@@ -155,6 +159,19 @@ class SignalsEnsemble:
                 reasons.extend(rule_eval.reasons)
             if regime != NEUTRAL:
                 reasons.append(f"regime={regime} (mult={reg_mult:.2f})")
+
+            # Volatility-scaled conviction (opt-in): score per unit of
+            # realized vol. Guard div-by-zero; skip scaling when vol<=0.
+            # Applied AFTER the [-1,+1] clip and intentionally NOT re-clipped
+            # — the point is to re-rank by conviction/vol.
+            if getattr(self.settings, "vol_scale_scores", False) and self.vol_fn is not None:
+                try:
+                    v = float(self.vol_fn(t) or 0.0)
+                except Exception:  # noqa: BLE001
+                    v = 0.0
+                if v > 0:
+                    score = score / v
+                    reasons.append(f"vol_scaled(vol={v:.4f})")
             if not rank_scores:
                 reasons.append("rank:rules")
             if not news_scores:

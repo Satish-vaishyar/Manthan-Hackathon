@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import yaml
 
@@ -149,6 +149,43 @@ class StrategySettings:
     # — Monte-Carlo + Markowitz-on-IC estimates from the trade journals).
     weights_mode: str = "static"
     optimized_weights_path: str = "configs/optimized_weights.json"
+    # --- Strategy improvements (2026-10-29) — all opt-in / fail-soft ---
+    # Multi-horizon momentum blend {d5, d10, d20}. None = disabled (mom
+    # sub-score unchanged).
+    mom_horizon_weights: Optional[dict[str, float]] = None
+    # Minimum holding period in sim days before a SELL/COVER is allowed
+    # (stop-loss + settlement-guard exits are exempt). 0 disables.
+    min_hold_days: int = 3
+    # Universe-relative entry timing gate (top-N + >= own rolling median).
+    entry_timing: "EntryTimingSettings" = None  # type: ignore[assignment]
+    # Exponential decay half-life (sim days) for news sentiment. 0 disables.
+    news_half_life_days: float = 0.0
+    # Veto BUYs where rank and mom strongly disagree in sign.
+    disagreement_gate: "DisagreementGateSettings" = None  # type: ignore[assignment]
+    # Replace momentum with mean reversion in risk_off regimes.
+    mean_reversion_in_risk_off: bool = False
+    # Only BUY tickers that newly entered the top-3 today.
+    fresh_entry_only: bool = False
+
+
+@dataclass
+class EntryTimingSettings:
+    """Universe-relative entry timing: a BUY is allowed only if the ticker
+    is in the day's top-`top_n` ensemble scores AND its score is >= its own
+    rolling `lookback_days` median (uses available days once >=
+    `min_history`; fewer -> gate no-ops)."""
+    enabled: bool = False
+    top_n: int = 2
+    lookback_days: int = 20
+    min_history: int = 3
+
+
+@dataclass
+class DisagreementGateSettings:
+    """Veto BUY entries where sign(rank_score) != sign(mom_score) and both
+    |scores| exceed `threshold` (strong disagreement)."""
+    enabled: bool = False
+    threshold: float = 0.1
 
 
 @dataclass
@@ -275,6 +312,9 @@ class SignalsSettings:
     weights: dict[str, float] = field(
         default_factory=lambda: {"rank": 0.45, "news": 0.35, "mom": 0.20}
     )
+    # Volatility-scaled conviction: divide each ticker's final score by its
+    # realized vol before ranking (vol<=0 -> skip scaling for that ticker).
+    vol_scale_scores: bool = False
 
 
 @dataclass
@@ -381,6 +421,28 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
             s.strategy.idle_cash_deploy = IdleCashDeploySettings(
                 enabled=bool(icd_block.get("enabled", True)),
                 epsilon=float(icd_block.get("epsilon", 0.05) or 0.05),
+            )
+        # Strategy improvements: entry-timing + disagreement-gate sub-blocks
+        # need pre-parsing before the dataclass filter strips them (same
+        # pattern as rl_tuner / idle_cash_deploy above).
+        et_block = strat.pop("entry_timing", None)
+        if et_block is not None:
+            s.strategy.entry_timing = EntryTimingSettings(
+                enabled=bool(et_block.get("enabled", False)),
+                top_n=int(et_block.get("top_n", 2) or 2),
+                lookback_days=int(et_block.get("lookback_days", 20) or 20),
+                min_history=int(et_block.get("min_history", 3) or 3),
+            )
+        dg_block = strat.pop("disagreement_gate", None)
+        if dg_block is not None:
+            s.strategy.disagreement_gate = DisagreementGateSettings(
+                enabled=bool(dg_block.get("enabled", False)),
+                threshold=float(dg_block.get("threshold", 0.1) or 0.1),
+            )
+        if "mom_horizon_weights" in (merged.get("strategy") or {}):
+            mhw = merged["strategy"].get("mom_horizon_weights")
+            s.strategy.mom_horizon_weights = (
+                {str(k): float(v) for k, v in mhw.items()} if mhw else None
             )
     if "risk" in merged:
         risk = dict(merged["risk"])

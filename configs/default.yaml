@@ -69,6 +69,39 @@ strategy:
   idle_cash_deploy:
     enabled: true
     epsilon: 0.05
+  # --- Strategy improvements (2026-10-29) — each individually disable-able ---
+  # Multi-horizon momentum blend: 5d/10d/20d vol-normalised log-return
+  # z-scores replace the single-horizon mom sub-score. Remove the block (or
+  # set to null) to disable.
+  mom_horizon_weights: { d5: 0.3, d10: 0.4, d20: 0.3 }
+  # Minimum holding period: SELL/COVER skipped for lots younger than this
+  # many sim days (stop-loss + settlement-guard exits exempt). Scalp churn
+  # (<3d holds) lost Rs 13K in the tradebook post-mortem. 0 disables.
+  min_hold_days: 3
+  # Universe-relative entry timing: BUY allowed only if the ticker is in the
+  # day's top-2 ensemble scores AND >= its own 20-sim-day median score
+  # (median of available days once >= 3; fewer -> gate no-ops).
+  entry_timing:
+    enabled: true
+    top_n: 2
+    lookback_days: 20
+    min_history: 3
+  # News decay: exponential per-ticker sentiment decay, half-life in sim
+  # days (effective = max over recent days of score * 0.5**(age/half_life)).
+  # 0 disables (raw same-day score).
+  news_half_life_days: 2.0
+  # Ensemble disagreement gate: veto BUYs where sign(rank) != sign(mom) and
+  # both |scores| > threshold; journaled as HOLD w/ signal_disagreement.
+  disagreement_gate:
+    enabled: true
+    threshold: 0.1
+  # Mean reversion in risk_off: momentum is anti-predictive in risk-off, so
+  # the mom sub-score is replaced by the negative 10d return z-score.
+  mean_reversion_in_risk_off: true
+  # Fresh entry only: a ticker enters the target book only if it newly
+  # entered the top-3 today (wasn't in yesterday's top-3 by score).
+  # Existing holdings are unaffected (exits/rebalances proceed normally).
+  fresh_entry_only: true
 
 risk:
   # Wider ATR stop so we don't get shaken out of mid-band winners on 1-2d dips.
@@ -122,4 +155,7 @@ signals:
     min_df: 2
   # Ensemble weights (sum need not be 1; renormalised over available signals)
   weights: { rank: 0.45, news: 0.35, mom: 0.20 }
+  # Volatility-scaled conviction: divide each ticker's final ensemble score
+  # by its realized vol before ranking (vol<=0 -> skip scaling).
+  vol_scale_scores: true
   # M5 regime detection owns its own RegimeConfig — see bot.models.regime.

@@ -34,12 +34,18 @@ class Ensemble:
     def __init__(self, settings: StrategySettings,
                  rank_fn=None,
                  news_fn=None,
-                 mom_fn=None) -> None:
+                 mom_fn=None,
+                 vol_fn=None,
+                 vol_scale: bool = False) -> None:
         self.settings = settings
         self.rules = RulesStrategy()
         self.rank_fn = rank_fn or self._default_rank
         self.news_fn = news_fn or self._default_news
         self.mom_fn = mom_fn or self._default_mom
+        # Volatility-scaled conviction (opt-in): divide the final blended
+        # score by realized vol before ranking. vol<=0 -> skip scaling.
+        self.vol_fn = vol_fn
+        self.vol_scale = vol_scale
 
     def evaluate(self, bundle: DayBundle) -> list[EnsembleEval]:
         """Score every ticker in the bundle: rules base evaluation, then
@@ -55,6 +61,13 @@ class Ensemble:
             w = self.settings.weights
             score = w.get("rank", 0.45) * r + w.get("news", 0.35) * n + w.get("mom", 0.20) * m
             score = max(-1.0, min(1.0, score))
+            if self.vol_scale and self.vol_fn is not None:
+                try:
+                    v = float(self.vol_fn(t) or 0.0)
+                except Exception:  # noqa: BLE001
+                    v = 0.0
+                if v > 0:
+                    score = score / v  # intentionally not re-clipped
             out.append(EnsembleEval(
                 ticker=t, score=score,
                 rank_score=r, news_score=n, momentum_score=m,

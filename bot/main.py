@@ -151,13 +151,37 @@ class TradingBot:
         rank_fn = self._try_build_model1_fn()
         news_fn = self._try_build_model2_fn()
         mom_fn = self._try_build_model3_fn()
+        # --- Strategy-improvement overlays (all opt-in, fail-soft) ---------
+        from .signals.overlays import (
+            make_horizon_blend_mom_fn,
+            make_mean_reversion_mom_fn,
+        )
+        strat = settings.strategy
+        # Momentum horizon blend: 5d/10d/20d weighted z-scores replace the
+        # single-horizon mom sub-score (model3 scorer itself is untouched).
+        if getattr(strat, "mom_horizon_weights", None):
+            mom_fn = make_horizon_blend_mom_fn(
+                mom_fn, self.ring_buffer, strat.mom_horizon_weights)
+        # Mean reversion in risk_off: replaces the mom sub-score with the
+        # negative 10d return z-score. Reads self._current_regime, which
+        # _on_day sets BEFORE evaluate() each day.
+        if getattr(strat, "mean_reversion_in_risk_off", False):
+            mom_fn = make_mean_reversion_mom_fn(
+                mom_fn, self.ring_buffer,
+                lambda: getattr(self, "_current_regime", "neutral"))
         self.signals_ensemble = SignalsEnsemble(
             settings.signals,
             rank_fn=rank_fn,
             news_fn=news_fn,
             mom_fn=mom_fn,  # momentum now has its own model3 scorer
             rules=self.rules_fallback,
+            vol_fn=self.volatility.vol,  # used iff signals.vol_scale_scores
         )
+        # Rolling per-ticker ensemble score history (entry-timing gate) and
+        # yesterday's top-3 set (fresh-entry gate). Seeded empty — gates
+        # no-op until enough history accrues.
+        self._score_hist: dict[str, list[float]] = {}
+        self._prev_top3: Optional[set[str]] = None
         # P3-18: statistically-optimized weights (Monte Carlo + Markowitz-on-IC,
         # see scripts/optimize_weights.py). When weights_mode == "optimized"
         # and the JSON exists, it overrides the static YAML weights AND is
@@ -327,6 +351,14 @@ class TradingBot:
                 kw = keyword.score(bundle)
                 return {t: kw[t]["news_score"] for t in kw}
 
+            # News decay (opt-in): exponential decay of per-ticker sentiment
+            # with half-life `news_half_life_days` sim days. 0 = raw
+            # same-day score (no wrapper).
+            half_life = float(getattr(self.settings.strategy,
+                                      "news_half_life_days", 0.0) or 0.0)
+            if half_life > 0:
+                from .signals.overlays import make_decayed_news_fn
+                return make_decayed_news_fn(_news_fn, half_life)
             return _news_fn
         except Exception as e:  # noqa: BLE001
             _log.warning("model2_load_failed", err=repr(e), component="main")
@@ -1002,6 +1034,9 @@ class TradingBot:
         # constructor applies the regime scaling directly.
         try:
             regime_label = self.regime.update(bundle)
+            # Expose the regime to the mom_fn overlays (mean reversion in
+            # risk_off reads this attribute at evaluate() time).
+            self._current_regime = regime_label
             # P3-15: if RL tuner is on, override the ensemble weights for
             # THIS day's evaluation. The tuner updates its weights via UCB1
             # every `update_every_trades` fills, so the ensemble adaptively
@@ -1030,6 +1065,18 @@ class TradingBot:
         self._last_scores = scores_for_constructor
         self._last_regime = regime_label
         self._last_sim_date = bundle.simulated_date
+
+        # --- Entry-gate context (entry timing + fresh entry) ---------------
+        # Rank today's tickers by ensemble score; gates below use these sets.
+        ranked_today = sorted(evals, key=lambda e: e.score, reverse=True)
+        et_cfg = getattr(self.settings.strategy, "entry_timing", None)
+        et_enabled = bool(et_cfg and getattr(et_cfg, "enabled", False))
+        et_top_n = int(getattr(et_cfg, "top_n", 2) or 2) if et_cfg else 2
+        top_n_set = {e.ticker for e in ranked_today[:max(1, et_top_n)]}
+        fresh_only = bool(getattr(self.settings.strategy,
+                                  "fresh_entry_only", False))
+        top3_today = {e.ticker for e in ranked_today[:3]}
+        prev_top3 = self._prev_top3  # None -> gate no-ops (fail-soft)
 
         equity = self.ledger.equity or 1.0
         # M5: regime + gross_long_target are applied inside build_target_weights.
@@ -1060,8 +1107,73 @@ class TradingBot:
         )
 
         # 5) Execute trades
+        min_hold = int(getattr(self.settings.strategy, "min_hold_days", 0) or 0)
+        from .signals.overlays import passes_entry_timing, strong_disagreement
+        dg_cfg = getattr(self.settings.strategy, "disagreement_gate", None)
+        dg_enabled = bool(dg_cfg and getattr(dg_cfg, "enabled", False))
+        dg_thr = float(getattr(dg_cfg, "threshold", 0.1) or 0.1) if dg_cfg else 0.1
         for d in deltas.trades:
             qty = d.qty
+            # Minimum holding period: skip SELL/COVER for lots younger than
+            # `min_hold_days` sim days UNLESS the exit is a stop-loss or the
+            # settlement guard (those must always be allowed through).
+            if min_hold > 0 and d.action in ("SELL", "COVER"):
+                from .signals.overlays import min_hold_allows_exit
+                age_days: Optional[int] = None
+                if d.action == "SELL":
+                    lots = self.ledger.lots.get(d.ticker)
+                    if lots:
+                        # FIFO: the oldest lot is the one being sold.
+                        age_days = (bundle.simulated_date
+                                    - lots[0].buy_date).days
+                else:
+                    sp = self.ledger.shorts.get(d.ticker)
+                    if sp is not None:
+                        age_days = (bundle.simulated_date
+                                    - sp.open_date).days
+                if not min_hold_allows_exit(age_days, min_hold, d.reason):
+                    _log.info("hold_period_blocked", ticker=d.ticker,
+                              action=d.action, age_days=age_days,
+                              min_hold_days=min_hold, reason=d.reason,
+                              component="main")
+                    continue
+            if d.action == "BUY":
+                ev_gate = next((e for e in evals if e.ticker == d.ticker), None)
+                # Ensemble disagreement gate: veto BUYs where rank and mom
+                # strongly disagree in sign. Journaled as HOLD with reason
+                # `signal_disagreement` via the hold-record loop below.
+                if dg_enabled and ev_gate is not None and strong_disagreement(
+                        ev_gate.rank_score, ev_gate.momentum_score, dg_thr):
+                    ev_gate.reasons.append("signal_disagreement")
+                    _log.info("signal_disagreement", ticker=d.ticker,
+                              rank=round(ev_gate.rank_score, 4),
+                              mom=round(ev_gate.momentum_score, 4),
+                              threshold=dg_thr, component="main")
+                    continue
+                # Universe-relative entry timing: must be in today's top-N
+                # AND >= its own rolling median score.
+                if et_enabled:
+                    hist = self._score_hist.get(d.ticker, [])
+                    lookback = int(getattr(et_cfg, "lookback_days", 20) or 20)
+                    min_hist = int(getattr(et_cfg, "min_history", 3) or 3)
+                    window = hist[-lookback:] if lookback > 0 else hist
+                    score_now = ev_gate.score if ev_gate is not None else 0.0
+                    if (d.ticker not in top_n_set
+                            or not passes_entry_timing(score_now, window, min_hist)):
+                        _log.info("entry_timing_blocked", ticker=d.ticker,
+                                  score=round(score_now, 4),
+                                  in_top_n=d.ticker in top_n_set,
+                                  n_history=len(window), component="main")
+                        continue
+                # Fresh-entry only: only BUY tickers that newly entered the
+                # top-3 today (weren't in yesterday's top-3 by score).
+                if fresh_only and prev_top3 is not None:
+                    if d.ticker not in top3_today or d.ticker in prev_top3:
+                        _log.info("fresh_entry_blocked", ticker=d.ticker,
+                                  in_top3=d.ticker in top3_today,
+                                  was_in_top3=d.ticker in prev_top3,
+                                  component="main")
+                        continue
             # P3-20: clamp SELL/COVER to the SERVER-verified position so the
             # server never sees an order it would reject with
             # INSUFFICIENT_MARGIN / INSUFFICIENT_HOLDINGS. The local ledger
@@ -1150,6 +1262,18 @@ class TradingBot:
                 "latency_ms": {"assemble": bundle.assembly_latency_ms},
                 "order_id": "", "status": "HOLD", "reject_code": None,
             })
+
+        # 7) Update rolling score history (entry-timing gate) + yesterday's
+        # top-3 set (fresh-entry gate) AFTER all decisions for the day.
+        lookback_cap = 20
+        if et_cfg is not None:
+            lookback_cap = max(1, int(getattr(et_cfg, "lookback_days", 20) or 20))
+        for e in evals:
+            h = self._score_hist.setdefault(e.ticker, [])
+            h.append(e.score)
+            if len(h) > lookback_cap:
+                del h[: len(h) - lookback_cap]
+        self._prev_top3 = top3_today
 
         self.lifecycle.stats.days_traded += 1
 
