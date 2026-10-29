@@ -1286,6 +1286,23 @@ class TradingBot:
             max_orders_remaining=max_orders_remaining,
             short_allowed=short_allowed,
         )
+        # P4-01 trace: candidates were seen live but no SHORT orders reached
+        # the server (2026-10-30) — make every short target's fate visible.
+        for t, w in target_w.items():
+            if w >= 0:
+                continue
+            emitted = next((d for d in deltas.trades
+                            if d.ticker == t and d.action in ("SHORT", "COVER", "SELL")),
+                           None)
+            skipped = next((r for (tk, r) in deltas.skipped if tk == t), None)
+            _log.info("short_delta_trace", ticker=t, target_w=round(w, 4),
+                      equity=round(equity, 0),
+                      price=round(bundle.ticks[t].close, 2) if t in bundle.ticks else None,
+                      emitted_action=emitted.action if emitted else None,
+                      emitted_qty=emitted.qty if emitted else 0,
+                      skipped_reason=skipped, short_allowed=short_allowed,
+                      orders_remaining=max_orders_remaining,
+                      component="short_engine")
 
         # P3-23: take-profit — a long that gained >= take_profit_pct from its
         # FIFO entry is SOLD here, instead of riding back down until the
