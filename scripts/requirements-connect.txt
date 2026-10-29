@@ -1,0 +1,4 @@
+# Minimal dependencies for scripts/connect.py
+# (matches what docs/10 lists as core deps)
+aiokafka>=0.10
+httpx>=0.27
