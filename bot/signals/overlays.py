@@ -223,6 +223,12 @@ def min_hold_allows_exit(age_days: Optional[int], min_hold_days: int,
         return True
     if age_days is None:
         return True
+    # Negative age = legacy lot whose true buy date is unknown (seeded with
+    # the wall-clock date while sim time runs years in the past). Never
+    # block those exits — the gate exists to stop same-week churn, not to
+    # freeze inherited positions.
+    if age_days < 0:
+        return True
     return age_days >= min_hold_days
 
 

@@ -68,6 +68,12 @@ _REPO_ROOT = Path(__file__).resolve().parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+# All runtime paths (model artifacts, configs/, journal dirs) are resolved
+# relative to the CWD — anchor it to the repo root so the launcher works
+# from any directory (e.g. `python C:\rev\app\Manthan-Hackathon\run_bot.py`
+# invoked from C:\rev\app would otherwise silently fall back to rules mode).
+os.chdir(_REPO_ROOT)
+
 
 # ---------------------------------------------------------------------------
 # Interpreter guard — the bot's deps (aiokafka, torch, onnxruntime, …) live in
