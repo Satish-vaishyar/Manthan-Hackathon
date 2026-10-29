@@ -119,7 +119,10 @@ def _ensure_interpreter() -> None:
             continue
         print(f"[run_bot] current interpreter ({sys.executable}) is missing "
               f"dependencies — re-launching with: {' '.join(cmd)}", flush=True)
-        os.execv(cmd[0], cmd + [str(Path(__file__).resolve())] + sys.argv[1:])
+        # subprocess (not os.execv) so the child keeps this console for
+        # interactive prompts and Ctrl-C handling on Windows.
+        proc = subprocess.run(cmd + [str(Path(__file__).resolve())] + sys.argv[1:])
+        sys.exit(proc.returncode)
     sys.exit(
         "[run_bot] FATAL: no interpreter with the bot dependencies found.\n"
         "  Install them into your default python:  python -m pip install -r "
