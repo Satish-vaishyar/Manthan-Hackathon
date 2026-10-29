@@ -1,8 +1,8 @@
 {
   "weights": {
-    "rank": 0.2565317890972302,
-    "news": 0.337444057156684,
-    "mom": 0.40602415374608597
+    "rank": 0.1,
+    "news": 0.2,
+    "mom": 0.7
   },
   "n_days": 10,
   "ic_mean": {
@@ -60,5 +60,6 @@
     "rank",
     "news",
     "mom"
-  ]
+  ],
+  "override_reason": "2026-10-30 P&L attribution: mom-driven trades +12.4L (58% win), rank-driven -1.07L (35% win), news -9.8K. IC-optimal weights were overridden toward the P&L-proven signal mix."
 }

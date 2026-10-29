@@ -1,44 +1,46 @@
-﻿"""Regression tests for the post-scaling per-name cap in build_target_weights."""
+﻿"""Regression tests: hard per-name cap + breadth fillers for utilization."""
 from bot.config import StrategySettings
-from bot.portfolio.constructor import build_target_weights
-from bot.portfolio.constructor import TickerScore  # type: ignore
+from bot.portfolio.constructor import TickerScore, build_target_weights
 
 
-def _scores(names):
-    return [TickerScore(ticker=t, score=1.0, vol=0.3) for t in names]
+def _scores(pairs):
+    return [TickerScore(ticker=t, score=s, vol=0.3) for t, s in pairs]
 
 
-def test_few_names_deploy_target_utilization():
+def _build(scores, top_k=8, cap=0.20, util=0.95):
     s = StrategySettings()
-    s.top_k = 8
-    s.max_weight_name = 0.20
-    w = build_target_weights(_scores(["A", "B"]), s, equity=1_000_000,
-                             current_holdings={}, current_shorts={},
-                             last_close={"A": 100, "B": 100},
-                             target_cash_utilization=0.95)
-    # 2 names: cap relaxes to 0.475 each -> 95% deployed, not stuck at 40%.
-    assert abs(sum(w.values()) - 0.95) < 1e-6, w
-    assert all(abs(x - 0.475) < 1e-6 for x in w.values()), w
+    s.top_k = top_k
+    s.max_weight_name = cap
+    close = {sc.ticker: 100.0 for sc in scores}
+    return build_target_weights(scores, s, equity=1_000_000,
+                                current_holdings={}, current_shorts={},
+                                last_close=close,
+                                target_cash_utilization=util)
+
+
+def test_two_names_hard_cap_limits_to_40pct():
+    # Concentration is NEVER relaxed: 2 names * 20% cap = 40% max deployed.
+    w = _build(_scores([("A", 1.0), ("B", 1.0)]))
+    assert max(w.values()) <= 0.20 + 1e-9, w
+    assert sum(w.values()) <= 0.40 + 1e-9, w
+
+
+def test_breadth_fillers_reach_utilization_without_concentration():
+    # 2 positive + 4 zero-score names -> fillers widen the book to >=5
+    # names, each capped at 20%, total ~95% deployed.
+    w = _build(_scores([("A", 1.0), ("B", 0.5), ("C", 0.0), ("D", 0.0),
+                        ("E", 0.0), ("F", 0.0)]))
+    assert len(w) >= 5, w
+    assert max(w.values()) <= 0.20 + 1e-9, w
+    assert sum(w.values()) > 0.80, w
+
+
+def test_negative_score_names_never_bought():
+    w = _build(_scores([("A", 1.0), ("BAD1", -0.5), ("BAD2", -0.1)]))
+    assert "BAD1" not in w and "BAD2" not in w, w
 
 
 def test_many_names_static_cap_binds():
-    s = StrategySettings()
-    s.top_k = 8
-    s.max_weight_name = 0.20
-    names = [f"T{i}" for i in range(8)]
-    w = build_target_weights(_scores(names), s, equity=1_000_000,
-                             current_holdings={}, current_shorts={},
-                             last_close={t: 100 for t in names},
-                             target_cash_utilization=0.95)
+    names = [(f"T{i}", 1.0 - i * 0.05) for i in range(8)]
+    w = _build(_build and _scores(names))
     assert max(w.values()) <= 0.20 + 1e-9, w
-
-
-def test_single_name_capped_at_100pct():
-    s = StrategySettings()
-    s.top_k = 8
-    s.max_weight_name = 0.20
-    w = build_target_weights(_scores(["ONLY"]), s, equity=1_000_000,
-                             current_holdings={}, current_shorts={},
-                             last_close={"ONLY": 100},
-                             target_cash_utilization=0.95)
-    assert w["ONLY"] <= 0.95 + 1e-9 and w["ONLY"] > 0.5, w

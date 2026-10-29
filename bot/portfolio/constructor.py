@@ -10,6 +10,7 @@ Per docs/04 §4:
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import date as _date
 from typing import Optional
@@ -55,8 +56,17 @@ def inverse_vol_weights(
     top_k: int,
     max_weight: float,
     equity: float,
+    min_names: int = 0,
 ) -> dict[str, float]:
-    """Pick top_k tickers by score, weight = score / vol (clipped at max_weight)."""
+    """Pick top_k tickers by score, weight = score / vol (clipped at max_weight).
+
+    min_names: when utilization targeting needs at least N names to deploy
+    the target under the hard per-name cap (e.g. 95% / 20% -> 5 names) but
+    fewer than N have positive scores, fill the remaining slots with the
+    best zero-score names (never negative — a negative score is a signal
+    veto). Fillers enter at the weakest qualifying conviction so they size
+    proportionally instead of dominating.
+    """
     if not scores or equity <= 0:
         return {}
     eligible = [s for s in scores if s.score > 0 and s.vol > 0]
@@ -64,6 +74,19 @@ def inverse_vol_weights(
         return {}
     eligible.sort(key=lambda s: s.score, reverse=True)
     chosen = eligible[:top_k]
+    if min_names > 0 and len(chosen) < min(min_names, top_k):
+        floor = min(s.score for s in chosen)
+        chosen_tickers = {s.ticker for s in chosen}
+        fillers = sorted(
+            (s for s in scores
+             if s.ticker not in chosen_tickers and s.vol > 0
+             and -1e-12 <= s.score <= 0),
+            key=lambda s: s.score, reverse=True,
+        )
+        for f in fillers[: max(0, min(min_names, top_k) - len(chosen))]:
+            chosen.append(TickerScore(ticker=f.ticker, score=floor,
+                                      vol=f.vol, sector=f.sector,
+                                      price=f.price))
     raw: dict[str, float] = {}
     for s in chosen:
         raw[s.ticker] = max(0.0, s.score) / max(1e-9, s.vol)
@@ -122,11 +145,18 @@ def build_target_weights(
             long exposure matches the regime target. If None, no scaling is
             applied (caller is responsible for it).
     """
+    # Breadth requirement for utilization targeting: to deploy target_util
+    # under the HARD per-name cap we need at least ceil(target/cap) names.
+    _tu = float(target_cash_utilization or 0.0) or float(
+        getattr(settings, "_target_cash_utilization", 0.0) or 0.0)
+    _cap = float(getattr(settings, "max_weight_name", 1.0) or 1.0)
+    _min_names = math.ceil(max(0.0, min(1.0, _tu)) / max(_cap, 1e-9)) if _tu > 0 else 0
     weights = inverse_vol_weights(
         scores,
         top_k=settings.top_k,
         max_weight=settings.max_weight_name,
         equity=equity,
+        min_names=_min_names,
     )
     # P3-13: drop excluded tickers before sector caps / regime scaling.
     for t in getattr(settings, "exclude_tickers", []) or []:
@@ -188,16 +218,14 @@ def build_target_weights(
     elif total_weight > 0 and current_util <= 0 and target_util > 0:
         weights = {t: w * (target_util / max(total_weight, 1e-9))
                    for t, w in weights.items()}
-    # Re-apply a per-name cap AFTER utilization scaling (the scale-up above
+    # Re-apply the per-name cap AFTER utilization scaling (the scale-up above
     # can push a name far past max_weight_name — observed live: a single
-    # 95%-of-equity order that failed to fill). When fewer names qualify
-    # than the static cap needs to reach the target (e.g. 2 names * 20% cap
-    # = 40% max vs 95% target), relax the cap to target_util / n_names so
-    # cash actually deploys; with enough names the static cap binds.
+    # 95%-of-equity order that failed to fill). HARD cap, no relaxation:
+    # concentration above max_weight_name is unacceptable risk (2026-10-30,
+    # user review). Utilization must come from ENOUGH names (main tops up
+    # the candidate list), never from oversized single names.
     if weights:
-        n = len(weights)
-        static_cap = float(getattr(settings, "max_weight_name", 1.0) or 1.0)
-        cap = min(1.0, max(static_cap, target_util / max(n, 1)))
+        cap = float(getattr(settings, "max_weight_name", 1.0) or 1.0)
         weights = {t: min(w, cap) for t, w in weights.items()}
     return weights
 

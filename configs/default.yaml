@@ -52,7 +52,7 @@ strategy:
   # default; enable to let the bot adapt weights online based on realised
   # per-day equity delta. See bot/portfolio/rl_tuner.py for the algo.
   rl_tuner:
-    enabled: true
+    enabled: false  # was true: warmup arm {rank .65} is the P&L-proven loser; pin weights
     update_every_trades: 10
     exploration_c: 1.4
     warmup_trades: 20
@@ -77,7 +77,7 @@ strategy:
   # Minimum holding period: SELL/COVER skipped for lots younger than this
   # many sim days (stop-loss + settlement-guard exits exempt). Scalp churn
   # (<3d holds) lost Rs 13K in the tradebook post-mortem. 0 disables.
-  min_hold_days: 3
+  min_hold_days: 7  # was 3; 0-3d scalps lost 93K in the recent era (stop-loss exits remain exempt)
   # Universe-relative entry timing: BUY allowed only if the ticker is in the
   # day's top-2 ensemble scores AND >= its own 20-sim-day median score
   # (median of available days once >= 3; fewer -> gate no-ops).
@@ -112,7 +112,7 @@ strategy:
 
 risk:
   # Wider ATR stop so we don't get shaken out of mid-band winners on 1-2d dips.
-  stop_atr_mult: 3.5
+  stop_atr_mult: 2.0  # tune_stops.py: +45.7K vs 3.5; cuts losers sooner
   # Less aggressive de-risking — 0.08 was tripping on noise.
   dd_soft: 0.12
   dd_hard: 0.15

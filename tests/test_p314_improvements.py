@@ -75,15 +75,20 @@ def test_cash_utilization_inflation(monkeypatch) -> None:
         target_cash_utilization=0.85,
     )
     post_total = sum(w.values())
-    # The scale-up should strictly INCREASE the gross exposure.
-    assert post_total > pre_total, (
-        f"expected scale-up: pre={pre_total} post={post_total}"
+    # 2026-10-30 semantics: utilization scale-up never exceeds the HARD
+    # per-name cap (no concentration). With two names already at the cap,
+    # gross stays at 2 * max_weight_name; the invariant is: never decrease,
+    # never breach the cap.
+    assert post_total >= pre_total, (
+        f"scale-up must not shrink gross: pre={pre_total} post={post_total}"
     )
-    # And the scale-up should match the 1.5x clamp.
-    expected = pre_total * 1.5
-    assert abs(post_total - expected) < 1e-6, (
-        f"expected {expected}, got {post_total}"
+    cap = s.strategy.max_weight_name
+    assert all(x <= cap + 1e-9 for x in w.values()), (
+        f"hard per-name cap breached: {w}"
     )
+    # The 1.5x clamp applies only until the hard per-name cap binds; with
+    # both names already at the cap, post == pre == 2 * cap.
+    assert abs(post_total - min(pre_total * 1.5, 2 * cap)) < 1e-6
 
 
 def test_trade_drops_marginal_trades(monkeypatch) -> None:
@@ -121,5 +126,5 @@ def test_trade_drops_marginal_trades(monkeypatch) -> None:
 def test_rl_tuner_block_parsed(monkeypatch) -> None:
     s = _settings(monkeypatch)
     assert s.strategy.rl_tuner is not None
-    assert s.strategy.rl_tuner.enabled is True
+    assert s.strategy.rl_tuner.enabled is False  # disabled 2026-10-30: rank-heavy arm was P&L-negative
     assert len(s.strategy.rl_tuner.arms) == 5

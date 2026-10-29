@@ -30,7 +30,7 @@ def test_strategy_weights_from_yaml(monkeypatch) -> None:
 
 def test_risk_settings_from_yaml(monkeypatch) -> None:
     s = _make_settings(monkeypatch)
-    assert s.risk.stop_atr_mult == pytest.approx(3.5)
+    assert s.risk.stop_atr_mult == pytest.approx(2.0)  # tuned 2026-10-30
     assert s.risk.dd_soft == pytest.approx(0.12)
     assert s.risk.max_consecutive_loss_pause == 0  # disabled by default
 
