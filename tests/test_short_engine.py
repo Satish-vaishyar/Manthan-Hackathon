@@ -230,8 +230,9 @@ def test_risk_per_name_short_cap_aligns_with_engine() -> None:
     rm = RiskManager(s.risk, None)  # no settlement calendar in test
     ledger = Ledger(cash=1_000_000.0, initial_cash=1_000_000.0)
     # a 9% single-name short passes; an 11% one is denied
-    assert rm.check_short(ledger, "AAA", 90, 1000.0, __import__("datetime").date(2026, 1, 5)).allowed
-    assert not rm.check_short(ledger, "AAA", 110, 1000.0, __import__("datetime").date(2026, 1, 5)).allowed
+    d = __import__("datetime").date(2026, 1, 5)
+    assert rm.check_short(ledger, "AAA", 90, 1000.0, d).ok
+    assert not rm.check_short(ledger, "AAA", 110, 1000.0, d).ok
 
 
 def test_short_engine_block_parsed_from_yaml() -> None:
