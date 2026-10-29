@@ -55,6 +55,7 @@ from .ingest.stage_watcher import StageWatcher
 from .journal.journal import DecisionJournal
 from .lifecycle import BotState, Lifecycle
 from .models.ensemble import Ensemble
+from .models.vol import VolEstimator
 from .portfolio.constructor import (
     PortfolioTarget,
     TickerScore,
@@ -106,6 +107,9 @@ class TradingBot:
         )
         self.validator = OrderValidator(settings, self.risk)
         self.ensemble = Ensemble(settings.strategy)
+        # M4: per-ticker realized-vol estimator for inverse-vol sizing.
+        # window=20 trading days; falls back to 0.02 until each ticker has 5+ obs.
+        self.vol = VolEstimator(window=20, fallback_vol=0.02)
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=20_000)
         self.kafka = KafkaIngest(settings, self.queue)
         self.assembler = DayAssembler(
@@ -331,12 +335,18 @@ class TradingBot:
             _log.error("ensemble_failed", err=repr(e), component="strategy")
             return
 
+        # 2b) Update vol estimator with today's closes (M4)
+        for ticker, tick in bundle.ticks.items():
+            self.vol.update(ticker, tick.close)
+
         # 3) Build target weights + trade deltas
         scores_for_constructor: list[TickerScore] = []
         for e in evals:
             price = bundle.ticks[e.ticker].close if e.ticker in bundle.ticks else 0.0
+            # M4: use realized vol from the rolling window; VolEstimator falls
+            # back to 0.02 for tickers with < 5 observations.
             scores_for_constructor.append(TickerScore(
-                ticker=e.ticker, score=e.score, vol=0.02,  # placeholder vol
+                ticker=e.ticker, score=e.score, vol=self.vol.vol(e.ticker),
                 sector=self._sector_of.get(e.ticker),
                 price=price,
             ))
