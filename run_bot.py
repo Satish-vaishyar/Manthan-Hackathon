@@ -219,6 +219,7 @@ async def _run_sim_mode(env: str, dry_run: bool) -> int:
 # Prompt + CLI
 # ---------------------------------------------------------------------------
 def _prompt_mode() -> str:
+    """Interactive picker -> 'kafka' or 'sim' (loops until valid input)."""
     print("=" * 64)
     print("  Manthan Trading Bot — choose a market-data source")
     print("=" * 64)
@@ -249,6 +250,7 @@ def _check_only(env: str) -> int:
 
 
 def main() -> int:
+    """Entry point: ensure the token, then dispatch to --check / kafka / sim."""
     ap = argparse.ArgumentParser(prog="run_bot")
     ap.add_argument("--mode", choices=["kafka", "sim"], default=None,
                     help="skip the prompt")

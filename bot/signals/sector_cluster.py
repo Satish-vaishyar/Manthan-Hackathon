@@ -28,6 +28,7 @@ _WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9_\-]+")
 
 
 def _tokenize(text: str) -> list[str]:
+    """Lowercased word tokens; mirrors the TF-IDF token_pattern above."""
     return [w.lower() for w in _WORD_RE.findall(text or "")]
 
 
@@ -138,6 +139,7 @@ class SectorCluster:
         return self.predict_one(ticker)
 
     def predict_many(self, tickers: Iterable[str]) -> dict[str, str]:
+        """Batch version of predict_one -> {ticker: sector_label}."""
         return {t: self.predict_one(t) for t in tickers}
 
     # ------------------------------------------------------------------
@@ -149,6 +151,7 @@ class SectorCluster:
 # Standalone helper for callers that don't want to instantiate the class.
 def cluster_sectors(stock_infos: Iterable,
                     settings: "SectorClusterSettings") -> dict[str, str]:
+    """One-shot fit + predict -> {ticker: sector_label}."""
     sc = SectorCluster(settings)
     sc.fit(stock_infos)
     return sc.to_dict()

@@ -19,6 +19,8 @@ from .ledger import RealisedGain
 
 @dataclass
 class FYTaxReport:
+    """Per-financial-year tax summary (gross gains/losses, taxable after
+    set-off + exemption, and final tax payable)."""
     fy_label: str
     stcg_gross: float = 0.0
     ltcg_gross: float = 0.0
@@ -31,6 +33,8 @@ class FYTaxReport:
 
 @dataclass
 class TaxEngineConfig:
+    """Tax rates + boundaries (Indian equity: STCG 15%, LTCG 10% over ₹1L,
+    ST/LT split at 365 days, FY starting 1 April)."""
     stcg_rate: float = 0.15
     ltcg_rate: float = 0.10
     ltcg_exemption: float = 100_000.0
@@ -121,6 +125,7 @@ def compute_fy_tax(
 
 
 def total_tax(gains: Iterable[RealisedGain], config: Optional[TaxEngineConfig] = None) -> float:
+    """Convenience: sum of tax_payable across all FYs."""
     return sum(r.tax_payable for r in compute_fy_tax(gains, config).values())
 
 
@@ -129,6 +134,8 @@ def total_tax(gains: Iterable[RealisedGain], config: Optional[TaxEngineConfig] =
 # ---------------------------------------------------------------------------
 @dataclass
 class HarvestOpportunity:
+    """One loss-harvest candidate lot, with the estimated tax saving net of
+    round-trip costs (sorted by saving, best first)."""
     ticker: str
     lot_index: int
     qty: int
@@ -172,7 +179,8 @@ def find_harvest_candidates(
             days = (today - lot.buy_date).days
             rate = stcg_rate if is_short_term(lot.buy_date, today, config.st_lt_boundary_days) else config.ltcg_rate
             saving = -pnl * rate  # loss × rate
-            # Subtract approx round-trip costs (brokerage + DP = 35.34 per lot)
+            # Subtract approx round-trip costs: ₹20 brokerage per order
+            # (buy-back) + ₹15.34 DP charge on the sell = ₹35.34 per lot.
             saving -= 35.34
             if saving < min_tax_saving:
                 continue

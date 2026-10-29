@@ -15,6 +15,7 @@ from typing import Iterable
 
 @dataclass
 class RunMetrics:
+    """Aggregate counters/percentiles computed from one journal.jsonl."""
     started_at: float = 0.0
     uptime_s: float = 0.0
     decisions_total: int = 0

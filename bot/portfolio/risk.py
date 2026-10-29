@@ -77,6 +77,8 @@ class RiskManager:
     # DD breakers
     # ------------------------------------------------------------------
     def update_equity(self, equity: float) -> RiskVerdict:
+        """Feed the latest equity mark into the DD tracker; deny with
+        RISK_DD_SOFT / RISK_DD_HARD once drawdown crosses those levels."""
         self.dd.update(equity)
         if self.dd.drawdown >= self.settings.dd_hard:
             return RiskVerdict.deny("RISK_DD_HARD",
@@ -99,6 +101,9 @@ class RiskManager:
         sector: Optional[str] = None,
         sector_exposures: Optional[dict[str, float]] = None,
     ) -> RiskVerdict:
+        """BUY checks: post-trade per-name cap, sector cap (if given), and
+        cash buffer (the greater of cash_buffer*equity and 15% of short
+        notional must remain after the trade)."""
         notional = qty * price
         equity = ledger.equity or 1.0
         # Per-name cap on POST-trade weight for THIS ticker
@@ -128,6 +133,7 @@ class RiskManager:
         return RiskVerdict.allow()
 
     def check_sell(self, ledger: Ledger, ticker: str, qty: int) -> RiskVerdict:
+        """SELL check: we actually hold enough shares."""
         if ledger.holding_qty(ticker) < qty:
             return RiskVerdict.deny("RISK_NO_HOLDING",
                 f"SELL {qty} of {ticker} but only hold {ledger.holding_qty(ticker)}")
@@ -142,6 +148,9 @@ class RiskManager:
         today: _date,
         short_allowed: bool = True,
     ) -> RiskVerdict:
+        """SHORT checks: stage allows it, settlement is >=3 trading days away
+        (forced square-off risk), gross short cap, and 5%-of-equity per-name
+        short cap."""
         if not short_allowed:
             return RiskVerdict.deny("RISK_SHORT_DISABLED",
                 f"short selling not allowed in current stage")
@@ -164,6 +173,7 @@ class RiskManager:
         return RiskVerdict.allow()
 
     def check_cover(self, ledger: Ledger, ticker: str, qty: int) -> RiskVerdict:
+        """COVER check: the open short is large enough."""
         sp = ledger.shorts.get(ticker)
         if sp is None or sp.qty < qty:
             return RiskVerdict.deny("RISK_NO_SHORT",

@@ -115,6 +115,7 @@ class RulesStrategy:
         return sum(list(buf)[-n:]) / n
 
     def _trend_score(self, buf: deque) -> float:
+        """SMA20-vs-SMA50 relative spread, scaled so a 5% gap saturates to ±1."""
         sma20 = self._sma(buf, 20)
         sma50 = self._sma(buf, 50)
         if sma20 is None or sma50 is None or sma50 <= 0:
@@ -124,6 +125,7 @@ class RulesStrategy:
 
     @staticmethod
     def _rsi14(buf: deque, n: int = 14) -> float:
+        """Classic 14-period RSI; 50.0 (neutral) until there's enough history."""
         if len(buf) < n + 1:
             return 50.0
         diffs = [buf[i] - buf[i - 1] for i in range(-n, 0)]
@@ -140,6 +142,8 @@ class RulesStrategy:
         return max(-1.0, min(1.0, (rsi - 50.0) / 20.0))
 
     def _news_score(self, bundle: DayBundle, ticker: str) -> float:
+        """Keyword polarity over today's headlines for `ticker`, in [-1, +1];
+        3+ matching items saturate the score."""
         pos = neg = 0
         for n in bundle.news:
             if n.ticker != ticker:

@@ -91,6 +91,8 @@ class TradingGate:
         return self._short_allowed
 
     async def open_for_day(self, sim_date: _date, max_orders: int, short_allowed: bool) -> None:
+        """Open the gate for a new simulated day; resets the order counter
+        when the date rolls. Called by TradingBot._on_day."""
         async with self._lock:
             if sim_date != self._sim_date:
                 self._sim_date = sim_date
@@ -132,6 +134,9 @@ class Lifecycle:
     # State transitions
     # ------------------------------------------------------------------
     async def transition(self, to: BotState, *, reason: str = "") -> bool:
+        """Attempt a state change; returns False (and logs) on an illegal
+        transition per the _LEGAL table. Also opens/closes the trading gate
+        as a side effect of the target state."""
         from_state = self.stats.state
         if to == from_state:
             return True
@@ -170,6 +175,7 @@ class Lifecycle:
         return True
 
     async def enter_safe_mode(self, reason: str) -> None:
+        """Shortcut for transitioning to SAFE_MODE (HOLD-only) with a reason."""
         await self.transition(BotState.SAFE_MODE, reason=reason)
 
     # ------------------------------------------------------------------
@@ -221,6 +227,8 @@ class Lifecycle:
             await self.transition(target, reason=f"stage={stage.stage}")
 
     async def wait_for(self, state: BotState, *, timeout: Optional[float] = None) -> bool:
+        """Wait until `state` is entered; False on timeout (non-blocking callers
+        should treat that as 'not there yet', not as an error)."""
         try:
             await asyncio.wait_for(self.events[state].wait(), timeout=timeout)
             return True
@@ -232,6 +240,7 @@ class Lifecycle:
         return self.stats.state
 
     def snapshot(self) -> dict:
+        """JSON-able view of the state machine + gate (for health endpoints/logs)."""
         return {
             "state": self.stats.state.value,
             "entered_state_at": self.stats.entered_state_at,

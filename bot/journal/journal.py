@@ -50,6 +50,7 @@ class DecisionJournal:
             print(f"[journal] write failed: {rec.get('ticker')}", file=sys.stderr)
 
     def close(self) -> None:
+        """Flush + close the file handle (idempotent; never raises)."""
         try:
             self._fh.close()
         except Exception:  # noqa: BLE001

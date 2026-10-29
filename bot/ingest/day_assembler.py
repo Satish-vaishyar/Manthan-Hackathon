@@ -107,6 +107,9 @@ class DayAssembler:
             await self._maybe_fire_by_deadline()
 
     async def _handle(self, event: KafkaEvent) -> None:
+        """Route one event into the current day: detect day rollovers, stash
+        out-of-order events, and flag count-completion. Preflight events are
+        ignored (the heartbeat path handles them)."""
         # Preflight ticks are NOT day events — ignore here (heartbeat handles them)
         if event.event_type == "preflight_tick":
             return

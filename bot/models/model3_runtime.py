@@ -73,6 +73,8 @@ class Model3Scorer:
         self._loaded = False
 
     def _try_load(self) -> bool:
+        """Idempotent loader: read model3_meta.json and load each seed's .pt
+        checkpoint (CPU, eval mode). Any failure -> False (rules fallback)."""
         if self._loaded:
             return True
         try:

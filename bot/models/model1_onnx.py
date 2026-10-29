@@ -116,6 +116,9 @@ class Model1Ranker:
         self._loaded = False
 
     def _try_load(self) -> bool:
+        """Idempotent loader: read model1_meta.json, then load members —
+        PyTorch .pt checkpoints first, ONNX as fallback. Any failure returns
+        False (caller falls back to RulesRanker)."""
         if self._loaded:
             return True
         try:

@@ -32,6 +32,7 @@ _log = structlog.get_logger("orders")
 
 @dataclass
 class OrderManagerStats:
+    """Cumulative order-outcome counters + last submit latency (observability)."""
     submitted: int = 0
     filled: int = 0
     rejected: int = 0

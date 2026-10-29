@@ -60,6 +60,7 @@ _model3_features_mod = None
 
 
 def _get_model1_features():
+    """Lazy-import model1/src/features.py once (keeps module import cheap)."""
     global _model1_features_mod
     if _model1_features_mod is None:
         _model1_features_mod = _load_module_from_path(
@@ -69,6 +70,7 @@ def _get_model1_features():
 
 
 def _get_model3_features():
+    """Lazy-import model3/src/features.py once."""
     global _model3_features_mod
     if _model3_features_mod is None:
         _model3_features_mod = _load_module_from_path(

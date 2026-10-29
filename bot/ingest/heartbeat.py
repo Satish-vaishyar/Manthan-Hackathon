@@ -71,6 +71,8 @@ class Heartbeat:
         return await self._send(ev.seq)
 
     async def _watchdog_loop(self) -> None:
+        """Re-send the last ACK'd seq every heartbeat_interval_s so the
+        portal's 15s liveness window never lapses between preflight ticks."""
         interval = self.settings.timing.heartbeat_interval_s
         while not self._stop.is_set():
             try:
@@ -84,6 +86,9 @@ class Heartbeat:
                         self.stats.watchdog_repeats += 1
 
     async def _send(self, seq: Optional[int], *, is_watchdog: bool = False) -> bool:
+        """POST one heartbeat. Tolerates both response shapes the platform
+        emits ({"accepted": true} and wrapped {"status": "ok"}); INVALID_SEQ
+        before the first preflight tick is normal, not an error."""
         body = {"seq": seq} if seq is not None else {}
         path = "/api/v1/bot/heartbeat"
         try:

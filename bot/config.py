@@ -18,6 +18,7 @@ CONFIGS = ROOT / "configs"
 
 
 def _read_yaml(p: Path) -> dict[str, Any]:
+    """Read a YAML file into a dict; missing file -> {} (env yaml optional)."""
     if not p.exists():
         return {}
     with p.open("r", encoding="utf-8") as f:
@@ -56,6 +57,9 @@ def _expand_env(v: Any) -> Any:
 
 @dataclass
 class KafkaSettings:
+    """Kafka ingest knobs. `consumers` is the number of consumer tasks in
+    one group (broker assigns partitions); auto-commit stays off — the
+    simulated feed is replayed per run, so offsets aren't ours to commit."""
     port: int = 9094
     consumers: int = 4
     topics: list[str] = field(default_factory=lambda: ["market.ticks", "market.news"])
@@ -66,6 +70,9 @@ class KafkaSettings:
 
 @dataclass
 class APISettings:
+    """REST gateway knobs. timeout_s is per-request; rate_per_min feeds the
+    token bucket (stay below the platform's 120/min hard cap or you get
+    429-penalised)."""
     port: int = 3002
     timeout_s: float = 1.5
     rate_per_min: int = 100  # planned; hard cap is 120 (see docs/06)
@@ -74,6 +81,12 @@ class APISettings:
 
 @dataclass
 class TimingSettings:
+    """Day-assembly + polling cadence (milliseconds/seconds).
+
+    news_window_ms: wait this long after the day's ticks for trailing news
+        before finalising a DayBundle by count.
+    hard_deadline_ms: finalise the day regardless after this budget.
+    """
     news_window_ms: int = 400
     hard_deadline_ms: int = 800
     heartbeat_interval_s: float = 10.0  # re-ACK watchdog cadence
@@ -89,6 +102,14 @@ class TimingSettings:
 
 @dataclass
 class StrategySettings:
+    """Signal-ensemble + trade-generation knobs.
+
+    weights: static blend of {rank, news, mom} sub-scores (renormalised).
+    top_k: max names in the target portfolio; max_weight_name: per-name cap.
+    rebalance_threshold: min |target-current| weight move worth trading.
+    min_trade_notional: fee-efficiency floor for entries (~Rs).
+    max_orders_per_day: hard daily order budget (concentrates conviction).
+    """
     weights: dict[str, float] = field(default_factory=lambda: {"rank": 0.45, "news": 0.35, "mom": 0.20})
     top_k: int = 8
     max_weight_name: float = 0.15
@@ -156,6 +177,13 @@ class RLTunerSettings:
 
 @dataclass
 class RiskSettings:
+    """Pre-trade risk caps (fractions of equity unless noted).
+
+    dd_soft/dd_hard: drawdown breakers (soft warns, hard -> SAFE_MODE).
+    max_short_gross: total short notional cap; max_name_weight: long cap per
+    name; max_sector_weight: per-sector cap; gross_long_target: per-regime
+    total long exposure (M5).
+    """
     stop_atr_mult: float = 2.5
     dd_soft: float = 0.08
     dd_hard: float = 0.15
@@ -183,6 +211,12 @@ class RiskSettings:
 
 @dataclass
 class TaxSettings:
+    """Cost model + Indian capital-gains tax knobs.
+
+    brokerage_per_order (flat Rs per order) and dp_charge_per_sell are
+    charged on EVERY simulated fill, so they gate trade frequency;
+    stcg/ltcg rates drive the harvest engine's benefit math.
+    """
     ltcg_wait_days: int = 30
     harvest_window_days: int = 10
     min_tax_saving: float = 70.0
@@ -198,6 +232,8 @@ class TaxSettings:
 
 @dataclass
 class SettlementSettings:
+    """Simulated settlement calendar: shorts must be closed before each
+    settlement boundary (every interval_trading_days trading days)."""
     interval_trading_days: int = 10
     force_close_before_days: int = 2  # close short positions N trading days early
 
@@ -243,6 +279,10 @@ class SignalsSettings:
 
 @dataclass
 class Settings:
+    """Root settings object: identity/credentials + all section dataclasses.
+
+    `dry_run=True` connects and scores but never submits orders.
+    """
     env: Literal["development", "sandbox", "live"] = "sandbox"
     server_ip: str = "127.0.0.1"
     team_username: str = ""

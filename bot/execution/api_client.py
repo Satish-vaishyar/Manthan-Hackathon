@@ -72,6 +72,8 @@ class APIClient:
         return {"Authorization": f"Bearer {self.settings.bot_access_token}"}
 
     async def get(self, path: str, *, params: Optional[dict] = None) -> dict:
+        """GET and return parsed JSON. Raises on non-2xx (callers treat GET
+        failures as retryable — no order-mutation risk)."""
         t0 = time.perf_counter()
         try:
             r = await self.client.get(path, params=params, headers=self._auth_headers())
@@ -90,6 +92,9 @@ class APIClient:
             raise
 
     async def post(self, path: str, body: dict) -> dict:
+        """POST and return {"_status": int, "_body": dict}. Never raises on
+        4xx/5xx (OrderManager maps status codes); timeouts return _status=0
+        so the caller treats the outcome as UNKNOWN."""
         t0 = time.perf_counter()
         try:
             r = await self.client.post(path, json=body, headers=self._auth_headers())

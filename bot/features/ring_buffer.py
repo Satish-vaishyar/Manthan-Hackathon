@@ -43,6 +43,7 @@ class Candle:
 
     @classmethod
     def from_tick(cls, tick: PriceTickData, sim_date) -> "Candle":
+        """Convert a Kafka PriceTickData into a Candle (missing volume -> 0)."""
         return cls(
             date=sim_date,
             open=tick.open,

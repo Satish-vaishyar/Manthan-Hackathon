@@ -29,6 +29,7 @@ class SettlementCalendar:
     anchor: Optional[_date] = None
 
     def observe_trading_day(self, d: _date) -> None:
+        """Record a trading day (kept sorted; O(n) insert, n = days in run)."""
         if d in self._observed_set:
             return
         # Insert sorted
@@ -49,6 +50,7 @@ class SettlementCalendar:
             return None
 
     def is_settlement_day(self, d: _date) -> bool:
+        """True if `d` is a multiple of interval_trading_days after the anchor."""
         idx = self.trading_day_index(d)
         if idx is None or self.anchor is None:
             return False
@@ -59,6 +61,7 @@ class SettlementCalendar:
         return (idx - anchor_idx) % self.interval_trading_days == 0
 
     def next_settlement_day(self, after: _date) -> Optional[_date]:
+        """First observed settlement day strictly after `after`, if known."""
         for d in self._observed:
             if d <= after:
                 continue
@@ -67,6 +70,8 @@ class SettlementCalendar:
         return None
 
     def days_to_next_settlement(self, today: _date) -> Optional[int]:
+        """Trading-day distance to the next settlement (None if unknown —
+        callers must treat None as 'no constraint', not as zero)."""
         nxt = self.next_settlement_day(today)
         if nxt is None:
             return None

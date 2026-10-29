@@ -43,6 +43,7 @@ _log = structlog.get_logger("rl_tuner")
 
 @dataclass
 class Arm:
+    """One candidate weight-triple + its running reward statistics."""
     weights: dict[str, float]
     pulls: int = 0            # how many trades we've observed under this arm
     reward_sum: float = 0.0   # sum of realised P&L (in rupees) since pull=0
@@ -51,6 +52,12 @@ class Arm:
 
 @dataclass
 class RLTuner:
+    """UCB1 bandit over ensemble-weight triples.
+
+    Thread-safe (async + sync callers share _lock). Reward = realised P&L
+    delta observed between reconciles; committed to the active arm every
+    `update_every_trades` observations, then UCB1 re-selects.
+    """
     arms: list[Arm] = field(default_factory=list)
     update_every_trades: int = 10
     exploration_c: float = 1.4
@@ -126,6 +133,8 @@ class RLTuner:
         self._select_ucb1()
 
     def _select_ucb1(self) -> None:
+        """Pick the next arm: round-robin while any arm is unpulled (warmup),
+        then argmax of mean reward + exploration bonus."""
         n_arms = len(self.arms)
         if n_arms == 1:
             self._current_arm_idx = 0

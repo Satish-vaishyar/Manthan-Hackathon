@@ -60,12 +60,16 @@ class StageWatcher:
                 pass
 
     def _interval_for(self, stage: Optional[str]) -> float:
+        """Poll faster during readiness stages (preflight cadence) than
+        during simulation (P3-14: <=10s detection of stage flips)."""
         s = self.settings
         if stage in ("development", "ready", "preflight"):
             return s.timing.stage_poll_preflight_s
         return s.timing.stage_poll_simulation_s
 
     async def _run(self) -> None:
+        """Poll loop: GET /stage -> StageInfo -> on_stage callback; logs
+        transitions and counts consecutive failures without crashing."""
         # First poll: short delay so we let other components come up
         try:
             await asyncio.wait_for(self._stop.wait(), timeout=2.0)

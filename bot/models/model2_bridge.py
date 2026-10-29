@@ -53,6 +53,9 @@ _PATCHED = False
 
 
 def _apply_encoder_patch() -> None:
+    """Redirect AutoTokenizer/AutoModel loads of 'ProsusAI/finbert' to the
+    local snapshot (offline guarantee per docs/02 §1). No-op if transformers
+    isn't installed or the snapshot is missing."""
     global _PATCHED
     if _PATCHED:
         return
@@ -128,6 +131,13 @@ class Model2NewsScorer:
                   "export", "baseline", "consolidate", "record_kafka")
 
     def _try_load(self) -> bool:
+        """Idempotent loader for model2's NewsScorer + aliases.
+
+        Puts model2/src at the FRONT of sys.path and purges colliding bare
+        module names (model/dataset/...) that model1/model3 also ship —
+        without the purge, sys.modules caching would hand us the wrong
+        'model' module. Failures set _last_err and return False.
+        """
         if self._loaded:
             return self._scorer is not None
         try:

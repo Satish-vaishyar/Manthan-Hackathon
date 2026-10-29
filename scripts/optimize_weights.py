@@ -90,6 +90,8 @@ def forward_returns(P: np.ndarray) -> np.ndarray:
 
 
 def main() -> int:
+    """CLI: load journal panels -> forward returns -> optimize -> write
+    configs/optimized_weights.json + a markdown report. Exit 1 if too few days."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", default="runs")
     ap.add_argument("--boot", type=int, default=1000)

@@ -42,6 +42,10 @@ class Ensemble:
         self.mom_fn = mom_fn or self._default_mom
 
     def evaluate(self, bundle: DayBundle) -> list[EnsembleEval]:
+        """Score every ticker in the bundle: rules base evaluation, then
+        blend rank/news/mom sub-scores with strategy weights (clipped to
+        [-1, +1]). NOTE: TradingBot actually uses signals.SignalsEnsemble;
+        this class is the lighter-weight legacy path."""
         rule_evals = self.rules.evaluate_day(bundle)
         out: list[EnsembleEval] = []
         for t, ev in rule_evals.items():

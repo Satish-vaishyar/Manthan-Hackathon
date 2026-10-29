@@ -24,6 +24,7 @@ class _Base(BaseModel):
 # Kafka events — docs/03 §1
 # ===========================================================================
 class PriceTickData(_Base):
+    """One OHLCV candle payload (the `data` field of a price_tick)."""
     ticker: str
     open: float
     high: float
@@ -33,6 +34,7 @@ class PriceTickData(_Base):
 
 
 class PriceTickEvent(_Base):
+    """market.ticks message: one ticker candle for one simulated_date."""
     event_type: Literal["price_tick"] = "price_tick"
     timestamp: datetime
     simulated_date: _date
@@ -40,6 +42,7 @@ class PriceTickEvent(_Base):
 
 
 class NewsFlashData(_Base):
+    """News payload; sentiment_hint is optional (platform may pre-score)."""
     ticker: str
     headline: str
     description: Optional[str] = None
@@ -48,6 +51,7 @@ class NewsFlashData(_Base):
 
 
 class NewsFlashEvent(_Base):
+    """market.news message: one headline for one ticker on a simulated day."""
     event_type: Literal["news_flash"] = "news_flash"
     timestamp: datetime
     simulated_date: _date
@@ -120,6 +124,9 @@ class OrderResponse(_Base):
 
 
 class Position(_Base):
+    """One holding in the portfolio response. NOTE: the server can report a
+    NEGATIVE quantity here — that is a short carried inside `holdings`, and
+    main._reconcile converts it into a ledger ShortPos."""
     ticker: str
     quantity: int
     # Live server sends `avg_buy_price` / `average_buy_price`; docs say avg_price.
@@ -130,6 +137,7 @@ class Position(_Base):
 
 
 class ShortPosition(_Base):
+    """Explicit short from the portfolio response (`shorts` list)."""
     ticker: str
     quantity: int
     entry_price: float
@@ -194,17 +202,20 @@ class BotStatus(_Base):
 
 
 class HeartbeatRequest(_Base):
+    """POST /api/v1/bot/heartbeat body — echoes the preflight tick seq."""
     seq: Optional[int] = None
     timestamp: Optional[datetime] = None
 
 
 class HeartbeatResponse(_Base):
+    """Heartbeat ACK result; accepted=False means the watchdog will retry."""
     accepted: bool
     seq: Optional[int] = None
     error: Optional[str] = None
 
 
 class StockInfo(_Base):
+    """One row of GET /api/v1/stocks (universe + sector metadata)."""
     ticker: str
     name: str
     description: Optional[str] = None

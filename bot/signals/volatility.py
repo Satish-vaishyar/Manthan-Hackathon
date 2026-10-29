@@ -33,6 +33,7 @@ class _TickerATR:
             self.trs = deque(self.trs, maxlen=self.window)
 
     def update(self, high: float, low: float, close: float) -> None:
+        """Append one true-range observation (Wilder TR: max of H-L, |H-C'|, |L-C'|)."""
         if self.prev_close is None:
             tr = high - low
         else:
