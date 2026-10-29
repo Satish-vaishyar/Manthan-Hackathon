@@ -804,13 +804,15 @@ class TradingBot:
     async def _maybe_deploy_idle_cash(self, p: PortfolioResponse) -> None:
         """Deploy cash freed by realised profits between day-bundles.
 
-        Called right after every successful reconcile. If the current cash
-        utilisation (1 - cash/equity) is more than `deploy_epsilon` below
-        `risk.target_cash_utilization`, place ONE extra BUY for the
-        highest-conviction ticker from the latest evaluation, sized to the
-        smaller of (a) the utilisation gap and (b) `max_cash_per_trade` of
-        available cash. All existing guards still apply: daily order budget,
-        min notional, per-name cap, validator (incl. cash reservation).
+        Called right after every successful reconcile (i.e. every
+        reconcile_interval_s, default 15s, so available server cash is
+        re-checked on a fixed cadence). If the current cash utilisation
+        (1 - cash/equity) is more than `deploy_epsilon` below
+        `risk.target_cash_utilization`, walk the conviction ranking and
+        place BUYs sized to each name's remaining per-name cap room until
+        the gap is closed or the daily order budget is exhausted. All
+        existing guards still apply: daily order budget, min notional,
+        per-name cap, validator (incl. cash reservation).
 
         Disabled via `strategy.idle_cash_deploy.enabled: false`.
         """
@@ -831,56 +833,72 @@ class TradingBot:
                 return
             target_util = float(getattr(self.settings.risk, "target_cash_utilization", 0.85) or 0.85)
             epsilon = float(getattr(cfg, "epsilon", 0.05) if cfg is not None else 0.05)
-            current_util = max(0.0, min(1.0, 1.0 - cash / equity))
-            gap = target_util - current_util
-            if gap <= epsilon:
-                return  # close enough to target — nothing to do
             # Daily order budget still applies.
             max_orders = self.settings.strategy.max_orders_per_day
             remaining = await self.lifecycle.gate.orders_remaining(max_orders)
             if remaining <= 0:
                 return
-            # Pick the highest-conviction ticker that isn't excluded.
             excluded = set(self.settings.strategy.exclude_tickers or [])
-            best = next((s for s in sorted(scores, key=lambda s: s.score, reverse=True)
-                         if s.ticker not in excluded and s.score > 0), None)
-            if best is None:
-                return
-            price = self.ledger.last_close.get(best.ticker, 0.0) or float(best.price or 0.0)
-            if price <= 0:
-                return
-            # Size: utilisation gap in rupees, capped by max_cash_per_trade
-            # of available cash, minus brokerage and a small price-drift
-            # buffer (1%) so the server never sees an over-cash order.
-            gap_cash = gap * equity
-            max_frac = float(getattr(self.settings.risk, "max_cash_per_trade", 0.90) or 0.90)
-            budget = min(gap_cash, cash * max_frac) * 0.99
-            budget -= self.settings.tax.brokerage_per_order
-            qty = int(budget / price)
-            if qty <= 0:
-                return
-            notional = qty * price
-            if notional < self.settings.strategy.min_trade_notional:
-                return  # gap too small to be worth a trade
-            # Per-name cap: don't exceed max_name_weight for this ticker.
-            cur_mv = self.ledger.holding_qty(best.ticker) * price
-            if (cur_mv + notional) / equity > self.settings.risk.max_name_weight:
-                return
-            req = OrderRequest(
-                ticker=best.ticker, action="BUY", quantity=qty,
-                date=getattr(self, "_last_sim_date", None) or _date.today(),
-                reason=f"idle_cash_deploy util={current_util:.2%}->{target_util:.2%}",
-            )
-            _log.info("idle_cash_deploy", ticker=best.ticker, qty=qty,
-                      notional=round(notional, 0), util=round(current_util, 4),
-                      target=target_util, cash=round(cash, 0), component="main")
-            await self.order_manager.submit(
-                req,
-                scores={"ensemble": best.score},
-                reasons=[f"regime={getattr(self, '_last_regime', 'neutral')}",
-                         "idle_cash_deploy"],
-            )
-            await self.lifecycle.gate.record_order()
+            # Walk the conviction ranking (not just the top name) so the
+            # deployer still works when the best ticker is already at its
+            # per-name cap. Up to `remaining` buys per reconcile, each
+            # closing part of the utilisation gap — this is what keeps
+            # utilisation >80% sustained instead of oscillating 30-60%.
+            candidates = [s for s in sorted(scores, key=lambda s: s.score, reverse=True)
+                          if s.ticker not in excluded and s.score > 0]
+            placed = 0
+            pending_notional = 0.0
+            for best in candidates:
+                if placed >= remaining:
+                    break
+                equity = float(p.equity or 0.0)
+                cash = float(p.cash or 0.0) - pending_notional
+                if equity <= 0 or cash <= 0:
+                    break
+                current_util = max(0.0, min(1.0, 1.0 - cash / equity))
+                gap = target_util - current_util
+                if gap <= epsilon:
+                    break  # close enough to target — done
+                price = self.ledger.last_close.get(best.ticker, 0.0) or float(best.price or 0.0)
+                if price <= 0:
+                    continue
+                # Size: utilisation gap in rupees, capped by max_cash_per_trade
+                # of available cash, minus brokerage and a small price-drift
+                # buffer (1%) so the server never sees an over-cash order.
+                gap_cash = gap * equity
+                max_frac = float(getattr(self.settings.risk, "max_cash_per_trade", 0.90) or 0.90)
+                budget = min(gap_cash, cash * max_frac) * 0.99
+                budget -= self.settings.tax.brokerage_per_order
+                # Per-name cap: size down to the remaining room for this
+                # ticker (instead of giving up entirely when it's full).
+                cur_mv = self.ledger.holding_qty(best.ticker) * price
+                room = self.settings.risk.max_name_weight * equity - cur_mv
+                if room < self.settings.strategy.min_trade_notional:
+                    continue  # name already at cap — try the next one
+                budget = min(budget, room)
+                qty = int(budget / price)
+                if qty <= 0:
+                    continue
+                notional = qty * price
+                if notional < self.settings.strategy.min_trade_notional:
+                    continue  # gap too small to be worth a trade
+                req = OrderRequest(
+                    ticker=best.ticker, action="BUY", quantity=qty,
+                    date=getattr(self, "_last_sim_date", None) or _date.today(),
+                    reason=f"idle_cash_deploy util={current_util:.2%}->{target_util:.2%}",
+                )
+                _log.info("idle_cash_deploy", ticker=best.ticker, qty=qty,
+                          notional=round(notional, 0), util=round(current_util, 4),
+                          target=target_util, cash=round(cash, 0), component="main")
+                await self.order_manager.submit(
+                    req,
+                    scores={"ensemble": best.score},
+                    reasons=[f"regime={getattr(self, '_last_regime', 'neutral')}",
+                             "idle_cash_deploy"],
+                )
+                await self.lifecycle.gate.record_order()
+                pending_notional += notional
+                placed += 1
         except Exception as e:  # noqa: BLE001
             _log.warning("idle_cash_deploy_failed", err=repr(e), component="main")
 
