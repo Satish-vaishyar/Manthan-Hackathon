@@ -202,12 +202,22 @@ class TestAnyAxisTrigger:
     def test_any_axis_exit_still_blend_decay(self) -> None:
         e = ShortAlphaEngine(_settings(trigger="any_axis", entry_threshold=0.63,
                                        exit_threshold=0.40))
-        # held short, blend 0.34 < exit 0.40 -> dropped even though an axis
-        # is still strongly bearish... blend 0.343 >= 0.40? compute:
-        # (0.05 - 0.02 + 1.0)/3 = 0.343 < 0.40 -> cover. Correct: decay exit.
-        ev = [_eval("AAA", -0.05, 0.02, -1.00)]
+        # Held short whose axes all faded: blend (0.05-0.02+0.60)/3 = 0.21
+        # < exit 0.40 AND no axis >= 0.63 entry -> COVER (dropped).
+        ev = [_eval("AAA", -0.05, 0.02, -0.60)]
         assert e.evaluate(ev, regime="neutral", vol_fn=lambda t: 0.2,
                           held_shorts={"AAA": 100}) == {}
+
+    def test_held_short_requalifying_via_entry_is_kept(self) -> None:
+        e = ShortAlphaEngine(_settings(trigger="any_axis", entry_threshold=0.63,
+                                       exit_threshold=0.40))
+        # blend 0.343 < exit 0.40 but mom -1.00 still triggers entry: the
+        # position RE-QUALIFIES, so it must be kept (never strand a short
+        # whose thesis is still firing at full strength).
+        ev = [_eval("AAA", -0.05, 0.02, -1.00)]
+        out = e.evaluate(ev, regime="neutral", vol_fn=lambda t: 0.2,
+                         held_shorts={"AAA": 100})
+        assert "AAA" in out
 
 
 def test_short_engine_block_parsed_from_yaml() -> None:
