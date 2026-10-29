@@ -42,8 +42,18 @@ class Ledger:
 verify sign convention of "Short Market Value" against `/portfolio`).
 
 ### Reconciliation
-- `GET /portfolio` at startup, every 5 simulated days, after any rejection, and after each settlement day.
+- **Updated 2026-10-29:** `GET /portfolio` on a **15 s cadence** (`timing.reconcile_interval_s`),
+  at startup, after any rejection or `UNKNOWN` order status, and after each settlement day.
 - If `|cash_local − cash_platform| > ₹100` or any quantity differs → adopt platform values, log `LEDGER_DRIFT`.
+- **Server-holding cache:** each reconcile caches `_server_holdings` / `_server_shorts`
+  (**negative holdings from the server are treated as shorts**). Every SELL/COVER is clamped to
+  the server-verified quantity before submission and skipped entirely when nothing is sellable.
+- **Startup holdings review (P3-19):** the boot reconcile loads ALL server holdings (legacy
+  positions included) and logs `startup_holdings_loaded` + a per-name `holdings_snapshot`
+  (qty/avg/last/unrealised P&L) at every 15 s reconcile. Legacy holdings the model no longer
+  wants are sold on the first day-bundle (exit floor ₹5K).
+- Server-side caches are updated **optimistically** on every FILLED order
+  (`_apply_fill_to_server_cache`) so clamps stay accurate between reconciles.
 
 ## 2. Risk Manager
 
@@ -56,7 +66,8 @@ verify sign convention of "Short Market Value" against `/portfolio`).
 | Max gross long exposure | regime cap (92 / 75 / 40%) |
 | Max gross short exposure | 20% of equity |
 | Max single short | 5% of equity |
-| Cash buffer | `max(5% equity, 15% short notional)` must remain after every BUY/SHORT |
+| Cash buffer | **Updated 2026-10-29:** 2% of equity (`risk.cash_buffer: 0.02`) + short margin; constructor targets 85% cash utilization |
+| Max cash per trade | **Updated 2026-10-29:** `risk.max_cash_per_trade: 0.90` — validator rejects any BUY sized > 90% of available cash (root cause of 8 observed `INSUFFICIENT_CAPITAL` rejections) |
 | Max orders/day | 4 (config) |
 | Max quantity | 1,000,000 and integer ≥ 1 |
 | No trading when | gate closed, SAFE_MODE (except risk-reducing), stale data (> 2 intervals old) |
@@ -65,10 +76,10 @@ verify sign convention of "Short Market Value" against `/portfolio`).
 
 | Control | Rule |
 |---------|------|
-| ATR stop (long) | exit if `close < max_close_since_entry − 2.5·ATR14` |
+| ATR stop (long) | exit if `close < max_close_since_entry − 3.5·ATR14` (**Updated 2026-10-29**, `stop_atr_mult: 3.5`) |
 | ATR stop (short) | cover if `close > min_close_since_entry + 2.0·ATR14` |
 | Time stop | event longs ≤ 5 days, event shorts ≤ 3 days |
-| Drawdown breaker | equity −8% from peak → halve all target weights; −15% → flat 5 days then ramp back |
+| Drawdown breaker | **Updated 2026-10-29:** equity −12% (`dd_soft: 0.12`) from peak → halve all target weights; −15% (`dd_hard: 0.15`) → flat 5 days then ramp back. The breaker uses **server-reconciled equity** (`_last_server_equity`), not the stale local ledger mirror (a stale mirror once caused a false `RISK_DD_HARD 20%` → SAFE_MODE bounce with 0 trades), and `RiskManager.seed_equity()` seeds the peak from the first reconcile — fixing the boot-time "drawdown 100%" false-positive on every restart |
 | Shock filter | |ret_1| > 4σ → size ×0.5 for that ticker for 3 days |
 | Settlement guard | no new SHORT if `days_to_settlement < 3`; COVER all shorts on `days_to_settlement == 1` unless explicitly allowed |
 
@@ -107,23 +118,45 @@ fees paid, DP paid. Shown on the dashboard and compared against the portal's Tax
 
 ```
 ProposedOrder → validate() → RiskManager.approve() → PriorityQueue → RateLimiter.acquire()
-             → POST /orders (httpx.AsyncClient, keep-alive, timeout 1.5 s)
-             → on 2xx: parse fill → Ledger.apply() → Journal
-             → on rejection: handler table (doc 03 §3) → Journal
-             → on timeout: GET /orders?… → found? apply : resend once (if gate still open)
+             → POST /orders (httpx.AsyncClient, keep-alive, timeout 1.5 s, retry ≤3×)
+             → on 2xx: parse fill → Ledger.apply() → optimistic server-cache update → Journal
+             → on rejection (4xx): handler table (doc 03 §3) → immediate resync → Journal
+             → on timeout/give-up: status UNKNOWN → on_state_divergence → immediate _reconcile
 ```
+
+### 4.1a Zero-rejection architecture (Updated 2026-10-29, P3-16…P3-20 — all live)
+
+1. **Cash reservation for in-flight BUYs** (`validator.py`): `mark_in_flight(req, price)` reserves
+   `qty·price + brokerage`; `_validate_buy` checks against `cash − reserved_cash`; released on
+   `clear_in_flight`. A batch of same-day BUYs can no longer overdraw the wallet.
+2. **Server-holding clamps:** every SELL/COVER clamped to server-verified holdings cached at each
+   reconcile (negative holdings = shorts); skipped when nothing sellable.
+3. **BUY clamps:** every BUY clamped to server cash × 0.90 (`max_cash_per_trade`) × 0.98
+   (price-drift buffer) − brokerage.
+4. **Order POST retried up to 3×** — network errors: 1s/2s backoff; HTTP 429: penalty-box + 5s/10s.
+5. **No phantom fills, no blind REJECTEDs:** every give-up path (empty/unparseable body, retries
+   exhausted) returns status `UNKNOWN` and triggers an immediate `_reconcile` via
+   `on_state_divergence`. Root-cause example fixed: `INSUFFICIENT_MARGIN: Selling 1142 shares
+   exceeds current holding (-1166)` was caused by phantom fills synthesised from empty order
+   responses while the server was already short −1166.
+6. **Optimistic cache updates** on every FILLED order (`_apply_fill_to_server_cache`).
+7. **Marginal-trade filter unconditional:** notional < 50× brokerage (~₹1,000) is always skipped;
+   risk-reducing exits are exempt.
+
+Result on the tuned live run: **0 server rejections** (`INSUFFICIENT_*` count = 0).
 
 ### 4.2 Validation checklist (pure function, unit-tested)
 
 ```
-ticker in universe
+ticker in universe (and not in strategy.exclude_tickers — Updated 2026-10-29: [BLUX])
 action in {BUY, SELL, SHORT, COVER}
 quantity is int and 1 ≤ q ≤ 1_000_000
 gate open (or order is risk-reducing in SAFE_MODE)
-BUY:   q·close + 20 ≤ cash − buffer
-SELL:  q ≤ long_qty(ticker)
+BUY:   q·close + 20 ≤ (cash − reserved_cash) − buffer      # Updated 2026-10-29: in-flight reservation
+       and q·close ≤ 0.90 × cash                           # max_cash_per_trade
+SELL:  q ≤ long_qty(ticker) AND q ≤ server-verified holding # Updated 2026-10-29: server clamp
 SHORT: q·close + 20 ≤ cash − buffer ; days_to_settlement ≥ 3
-COVER: short_qty(ticker) ≥ q ; cover cost covered by margin release
+COVER: short_qty(ticker) ≥ q, clamped to server short qty   # Updated 2026-10-29
 date = current simulated_date
 no duplicate (same ticker+action) already in flight today
 ```

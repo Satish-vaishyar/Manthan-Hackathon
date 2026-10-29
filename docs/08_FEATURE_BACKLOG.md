@@ -4,6 +4,23 @@ Owner codes: **A** = Infra/Execution, **B** = ML, **C** = Strategy/Risk/Tax, **D
 Priorities: **P0** = must work before hour 4 (fallback bot); **P1** = core competitive bot by hour 14;
 **P2** = differentiators by hour 18. Nothing new after code freeze (hour 18).
 
+> **Updated 2026-10-29 — status: P0 + P1 are DONE and live** (170 pytest tests passing, all 6
+> models + rules fallback trading on live Kafka data). Post-freeze work continued as **P3-14 …
+> P3-20** (see §P3 below and WORK_LOG §6–§7). P2 items that shipped: P2-05 kill switch/SAFE_MODE
+> and P2-08 sector caps (0.30) are active; dashboard/HMM/standby remain aspirational.
+
+## P3 — Post-freeze hardening & tuning (2026-10-29, all DONE; see WORK_LOG §6–§7)
+
+| ID | Feature | Acceptance criteria | Status |
+|----|---------|---------------------|--------|
+| P3-14 | Six-point improvement suite: cash_buffer 0.02, target_cash_utilization 0.85, min_trade_notional ₹75K, max_cash_per_trade 0.90, reconcile 15 s / stage poll 10 s, `RiskManager.seed_equity()` boot DD fix | No boot "drawdown 100%" false-positive; utilisation tracks 85% | done |
+| P3-15 | RL tuner (`bot/portfolio/rl_tuner.py`) — UCB1 over 5 weight-triple arms, reward = realized equity delta per reconcile | `rl_tuner_ready/commit/switch` events in journal | done |
+| P3-16 | Rejection-0 hardening: in-flight BUY cash reservation; unconditional marginal-trade filter (notional < 50× brokerage skipped) | 0 `INSUFFICIENT_CAPITAL` | done |
+| P3-17 | Idle-cash deployer — after every 15 s reconcile deploy idle cash into highest-conviction ticker when utilisation >5pp below target | `idle_cash_deploy` events; guards (budget/caps/validator) all apply | done |
+| P3-18 | Statistically-estimated ensemble weights (`bot/portfolio/weight_optimizer.py` + `scripts/optimize_weights.py`): Spearman IC, IR / inverse-var / Markowitz-on-IC / 1000× MC bootstrap, shrinkage by P(w≤0); DD breaker on server-reconciled equity | `{rank 0.258, news 0.322, mom 0.420}` in `configs/optimized_weights.json`; loaded at boot, RL arm 0 | done |
+| P3-19 | Startup holdings review: boot reconcile loads ALL legacy holdings; `startup_holdings_loaded` + `holdings_snapshot` every 15 s; exit floor ₹5K sells unwanted legacy positions on first day-bundle | Legacy positions visible & unwound | done |
+| P3-20 | Zero server rejections: UNKNOWN status + immediate resync on empty/give-up order responses (no phantom fills); SELL/COVER clamped to server-verified holdings (negative = shorts); optimistic server-cache updates on FILLED | 0 `INSUFFICIENT_*` rejections on tuned run; `INSUFFICIENT_MARGIN -1166` root cause fixed | done |
+
 ## P0 — Fallback bot (target: hour 4, git tag `v0-fallback`)
 
 | ID | Feature | Owner | Acceptance criteria |
@@ -62,4 +79,6 @@ Priorities: **P0** = must work before hour 4 (fallback bot); **P1** = core compe
 
 - Multi-horizon ranker blend (h=1, h=3, h=5).
 - Pairs/stat-arb within sector clusters (cointegration on 120-d windows) for market-neutral exposure.
-- Online re-weighting of ensemble by trailing 60-day signal performance (bounded ±20%).
+- ~~Online re-weighting of ensemble by trailing signal performance~~ — **shipped 2026-10-29** in a
+  stronger form: UCB1 RL tuner over weight-triple arms (P3-15) seeded with statistically-estimated
+  weights (P3-18).

@@ -17,16 +17,24 @@ Read them in order on day one; afterwards use them as reference.
 | 10 | [Repo & Coding Standards](10_REPO_AND_CODING_STANDARDS.md) | Everyone | Folder layout, config, logging, git workflow, offline setup |
 | 11 | [Testing & Runbook](11_TESTING_AND_RUNBOOK.md) | Everyone | Tests, chaos drills, pre-flight checklist, live-hour runbook |
 | 12 | [Jury Defense](12_JURY_DEFENSE.md) | Everyone | Evaluation pillars, talking points, expected questions |
+| — | [WORK_LOG](WORK_LOG.md) | Everyone | Chronological log of live integration, fixes, tuning passes (P3-14…P3-20), tradebook analysis, and git history notes — **primary source of truth for what the bot does today** |
 
 ## The one-paragraph brief
 
-We build a single-process asyncio Python bot that consumes daily OHLCV candles and news from Kafka,
-waits a few hundred milliseconds after each candle for that day's news, scores every ticker with an
-ensemble (news-impact model + LightGBM cross-sectional ranker + momentum rules, gated by a market
-regime model), converts scores into volatility-scaled, cost-aware target weights, and sends a small
-number of validated, rate-limited market orders that fill at the day's close. A local ledger tracks
-cash, lots, margin, short settlements and Indian capital-gains tax so we never get a rejection, never
-get blocked, and actively optimise STCG/LTCG. Every decision is logged with its reasons so we can
+**Updated 2026-10-29 — what the bot is today (all live, 170 tests passing):** a single-process
+asyncio Python bot that consumes daily OHLCV candles and news from Kafka, waits a few hundred
+milliseconds after each candle for that day's news, and scores every ticker with an ensemble of
+**six trained models** — M1 CSTT ranker (5 ONNX members), M2 FinBERT NRIM news scorer (3 members,
+fully offline), M3 DMN momentum (5 members), M4 volatility (inverse-vol sizing), M5 regime
+detector (exposure 92/75/40%), M6 event tagger (±0.75) — plus a rules fallback. Ensemble weights
+are **statistically estimated** from 500 sim days of decision journals (Spearman IC +
+Markowitz-on-IC + Monte-Carlo bootstrap → {rank 0.258, news 0.322, mom 0.420}) and adapted live
+by a **UCB1 RL tuner**. Scores become volatility-scaled, cost-aware target weights tracking an
+**85% cash-utilization target** (with an idle-cash deployer), and a small number of validated,
+rate-limited orders (≤4/day, ≥₹75K notional) fill at the day's close. A local ledger plus a
+**zero-rejection execution layer** (in-flight cash reservation, server-holding clamps,
+UNKNOWN-status resyncs) delivered **0 server rejections** on the tuned run; the tradebook shows
+**+₹2.31L baseline / +₹1.51L tuned**. Every decision is journaled with its reasons so we can
 explain every trade to the jury.
 
 ## Golden rules (memorise these)

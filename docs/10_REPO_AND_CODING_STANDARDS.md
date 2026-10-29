@@ -1,12 +1,20 @@
 # 10 — Repository Layout & Coding Standards
 
+> **Updated 2026-10-29:** the layout below was the plan; notable additions since (marked ★ in the
+> tree): `run_bot.py` launcher, `bot/model2_bridge.py` (offline FinBERT bridge with sys.modules
+> purge), `bot/portfolio/weight_optimizer.py` + `rl_tuner.py`, `scripts/optimize_weights.py`,
+> `configs/optimized_weights.json`, and the offline model caches under `model2/` (gitignored).
+> Live git history note in §5.
+
 ## 1. Layout
 
 ```
 Manthan/
-├── docs/                       # these documents
+├── docs/                       # these documents (incl. WORK_LOG.md — running session log)
+├── run_bot.py                  # ★ single-file launcher: [1] KAFKA / [2] SIMULATION, --mode, --check
 ├── bot/
 │   ├── main.py                 # entrypoint: python -m bot.main --env sandbox|live [--dry-run]
+│   ├── model2_bridge.py        # ★ offline FinBERT bridge (sys.modules purge avoids model.py name collisions)
 │   ├── config.py               # loads configs/*.yaml + env vars into a typed Settings object
 │   ├── contracts.py            # pydantic models: ticks, news, preflight, API responses
 │   ├── lifecycle.py            # state machine BOOT→DISCOVER→PREFLIGHT→TRADING→PAUSED/COMPLETED/SAFE_MODE
@@ -34,7 +42,9 @@ Manthan/
 │   │   ├── constructor.py
 │   │   ├── risk.py
 │   │   ├── tax_engine.py
-│   │   └── settlement.py
+│   │   ├── settlement.py
+│   │   ├── weight_optimizer.py   # ★ IC + Markowitz-on-IC + MC bootstrap weight estimation
+│   │   └── rl_tuner.py           # ★ UCB1 bandit over weight-triple arms
 │   ├── execution/
 │   │   ├── api_client.py
 │   │   ├── rate_limiter.py
@@ -44,11 +54,16 @@ Manthan/
 │       ├── journal.py
 │       └── metrics.py
 ├── recorder/recorder.py
+├── scripts/
+│   └── optimize_weights.py     # ★ builds panels from runs/*/journal.jsonl → configs/optimized_weights.json
+├── model2/
+│   └── finbert_cache/          # ★ offline FinBERT weights (438 MB safetensors) — GITIGNORED
 ├── research/                   # offline scripts (doc 05 §7), backtest.py, sim_broker.py
 ├── dashboard/app.py            # Streamlit Mission Control
 ├── mocks/                      # mock Kafka producer + mock FastAPI gateway for offline dev
 ├── configs/
 │   ├── default.yaml
+│   ├── optimized_weights.json  # ★ estimated ensemble weights (weights_mode: optimized)
 │   ├── sandbox.yaml
 │   └── live.yaml
 ├── models/                     # trained artifacts + *.meta.json (git-lfs or gitignored + shared drive)
@@ -97,15 +112,23 @@ kafka: { port: 9094, consumers: 4, topics: [market.ticks, market.news] }
 api:   { port: 3002, timeout_s: 1.5, rate_per_min: 100 }
 timing: { news_window_ms: 400, hard_deadline_ms: 800 }
 strategy:
-  weights: { rank: 0.45, news: 0.35, mom: 0.20 }
-  top_k: 8
+  weights_mode: optimized        # ★ Updated 2026-10-29: loads configs/optimized_weights.json
+  weights: { rank: 0.258, news: 0.322, mom: 0.420 }   # static fallback only
+  top_k: 6                       # was 8
   max_weight_name: 0.15
-  rebalance_threshold: 0.025
-  min_trade_notional: 50000
-  max_orders_per_day: 4
-  event_long_threshold: 0.6
-  event_short_threshold: -0.6
-risk: { stop_atr_mult: 2.5, dd_soft: 0.08, dd_hard: 0.15, cash_buffer: 0.05, max_short_gross: 0.20 }
+  sector_cap: 0.30
+  rebalance_threshold: 0.05      # was 0.025
+  min_trade_notional: 75000      # entries; was 50000
+  exit_min_notional: 5000        # exits — legacy positions sellable
+  max_orders_per_day: 4          # largest-notional first
+  exclude_tickers: [BLUX]        # post-mortem: 22 trades, −₹27K
+  event_long_threshold: 0.75     # was 0.6
+  event_short_threshold: -0.75
+  rl_tuner: { enabled: true }    # UCB1, 5 arms, optimized triple = arm 0
+  idle_cash_deploy: { enabled: true, epsilon: 0.05 }
+risk: { stop_atr_mult: 3.5, dd_soft: 0.12, dd_hard: 0.15, cash_buffer: 0.02,
+        target_cash_utilization: 0.85, max_cash_per_trade: 0.90, max_short_gross: 0.20 }
+timing: { reconcile_interval_s: 15, stage_poll_simulation_s: 10 }   # was 30/30
 tax:  { ltcg_wait_days: 30, harvest_window_days: 10, min_tax_saving: 70 }
 ```
 
@@ -115,6 +138,25 @@ tax:  { ltcg_wait_days: 30, harvest_window_days: 10, min_tax_saving: 70 }
 - Pull request (or pair review) for anything in `execution/` or `portfolio/`.
 - Commit messages: `P1-09: add rebalance threshold to constructor`.
 - Tags: `v0-fallback`, `v1-ensemble`, `v2-final`.
+
+### 5.1 History rewrite of 2026-10-29 (important for anyone pulling old clones)
+
+On 2026-10-29, **ten local commits** (`d3ec439`…`58c53c5`) were **squashed into `dbbacbf`**
+before pushing: the original `d3ec439` had accidentally committed **~700 MB of model artifacts**
+(`model2/finbert_cache/` 438 MB safetensors, `model2/model3` `.pt` files ~3×114 MB, model3
+seeds), which GitHub rejects (HTTP 408 / hangup). The artifacts remain on disk — the bot needs
+the offline FinBERT cache — and are now gitignored:
+
+```
+model2/finbert_cache/
+model2/finbert_hf_home/
+model2/artifacts/*.pt
+model3/artifacts/
+*.safetensors
+```
+
+**Never commit model weights.** Pushed commits: `dbbacbf` (squash), `179f86b`, `ce11d96` (P3-21).
+Full pre-squash commit map: WORK_LOG §10.
 
 ## 6. Journal record schema (one JSON line)
 

@@ -1,5 +1,12 @@
 # 09 — Team Plan & Timeline
 
+> **Updated 2026-10-29:** this schedule was the pre-event plan and is kept for the record. What
+> actually happened after the event is chronicled in [WORK_LOG.md](WORK_LOG.md): all models wired
+> live, five tuning/hardening passes (P3-14…P3-20), tradebook post-mortem (+₹2.31L baseline,
+> +₹1.51L tuned), and a git squash of 10 local commits into `dbbacbf` before pushing (see
+> doc 10 §5). The freeze rules below were followed — post-freeze changes were analysis-driven
+> tuning and reliability fixes only, **no model retraining**.
+
 ## 1. Roles
 
 | Role | Code | Owns | Backup for |

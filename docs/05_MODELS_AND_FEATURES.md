@@ -16,6 +16,30 @@
 
 ## 2. Model inventory
 
+**Updated 2026-10-29 — as actually trained and LIVE in `bot/main.py`** (all wired, none retrained
+after go-live; rules fallback engages on any model failure):
+
+| ID | Model | Members | Implementation | Role | Status |
+|----|-------|---------|----------------|------|--------|
+| M1 | CSTT cross-sectional ranker | 5 | `bot/models/model1_onnx.py` (ONNX) | cross-sectional ranking signal `s_rank` | live |
+| M2 | FinBERT NRIM news scorer | 3 | offline from `model2/finbert_cache/` via `bot/model2_bridge.py` | news sentiment signal `s_news` | live |
+| M3 | DMN momentum | 5 | `model3` artifacts | momentum signal `s_mom` | live |
+| M4 | Volatility model | — | — | inverse-vol position sizing | live |
+| M5 | Regime detector | — | — | `gross_long_target` scaling: risk_on 0.92 / neutral 0.75 / risk_off 0.40 | live |
+| M6 | Event tagger | — | keyword/regex | event long/short, thresholds ±0.75 | live |
+| — | Rules fallback | — | `rules.py` | engages on any model failure | live |
+
+Implementation notes (2026-10-29):
+- **M2 offline serving:** FinBERT runs fully offline from `model2/finbert_cache/` with
+  `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1`. `bot/model2_bridge.py` performs a **sys.modules
+  purge** to avoid `model.py` filename collisions between M1 and M2 (whichever loaded second used
+  to silently shadow the first).
+- In REST-simulation mode (`run_bot.py` option 2) there is no news feed (no `/api/v1/news`
+  endpoint), so M2 is neutral there.
+- **Ensemble weights are statistically estimated**, not hand-picked — see §10 below.
+
+*Original pre-event design inventory (kept for reference):*
+
 | ID | Model | Type | Input | Output | Latency budget | Fallback |
 |----|-------|------|-------|--------|----------------|----------|
 | M1a | Event tagger | Regex/keyword rules | headline + description | event tags + polarity | < 1 ms | — |
@@ -141,7 +165,26 @@ research/
 
 ## 9. Offline prep (do BEFORE leaving for the venue)
 
-- [ ] `pip download -r requirements.txt -d wheels/` for the exact Python version on every laptop.
-- [ ] `huggingface-cli download ProsusAI/finbert` → `models/finbert/`; export ONNX int8.
-- [ ] Optional: NSE daily bars + Financial PhraseBank in `data/external/`.
-- [ ] Verify the whole pipeline runs with networking disabled.
+- [x] `pip download -r requirements.txt -d wheels/` for the exact Python version on every laptop.
+- [x] `huggingface-cli download ProsusAI/finbert` → cached offline in `model2/finbert_cache/`
+  (438 MB safetensors; gitignored — see doc 10 §5). Served with `HF_HUB_OFFLINE=1`.
+- [x] Optional: NSE daily bars + Financial PhraseBank in `data/external/`.
+- [x] Verify the whole pipeline runs with networking disabled.
+
+## 10. Ensemble weight estimation (Updated 2026-10-29, implemented)
+
+Hand-picked weights were replaced by data-estimated ones in `bot/portfolio/weight_optimizer.py`
+(pure numpy, no new deps):
+
+- **Panel:** `scripts/optimize_weights.py` rebuilds (signal, next-day return) panels from all run
+  journals — 12,396 records, **500 sim days × 10 tickers** (`runs/*/journal.jsonl`).
+- **Metric:** per-day cross-sectional **Spearman IC** of each signal vs next-day returns.
+- **Estimators:** IR-weighted (Grinold & Kahn), inverse-variance, **Markowitz-on-IC**
+  (w = simplex(Σ⁻¹μ), Ledoit-Wolf-shrunk covariance), and a **1,000× Monte-Carlo day-bootstrap**
+  of the Markowitz estimator.
+- **Final weights** = bootstrap mean, shrunk toward equal weights by the empirical P(w≤0) per
+  signal (data-driven James–Stein shrinkage).
+- **Result:** IC mean rank .017 / news .078 / mom .141 → **{rank 0.258, news 0.322, mom 0.420}**,
+  written to `configs/optimized_weights.json` with a report in `runs/_weight_optimization.md`.
+- The bot loads them at boot when `strategy.weights_mode: optimized` (configs/default.yaml) and
+  injects them as **arm 0** of the RL tuner (doc 04 §4). Static YAML weights are fallback only.

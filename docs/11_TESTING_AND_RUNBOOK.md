@@ -1,5 +1,10 @@
 # 11 — Testing & Runbook
 
+> **Updated 2026-10-29 — current state:** `python -m pytest tests/ -q` → **170 tests passing**
+> (grew 140 → 154 with P3-14/15, → 157 with P3-17, → 170 with P3-20; includes regression tests
+> for the YAML weights round-trip, in-flight cash reservation, server-holding clamps, and UNKNOWN
+> order status). New sections §7 (how to run) and §8 (PowerShell quirks) added below.
+
 ## 1. Unit tests (must pass before every tag)
 
 | Area | Cases |
@@ -58,6 +63,21 @@ Earlier STCG +30,000 same FY → net STCG 20,000 → tax 3,000
 
 ## 5. Live-hour runbook
 
+**Updated 2026-10-29 — ops facts:**
+- **One bot instance only** — never run two consumers of `group-mn2632`.
+- Heartbeat ACK on every `preflight_tick`, always within 15 s; portal shows "Waiting for ACK"
+  whenever preflight isn't actively broadcasting.
+- Kafka `192.168.65.157:9094`, topics `market.ticks` + `market.news`.
+- The platform stage bounces development↔simulation; **trades only fill during simulation**.
+- Boot reconcile loads **ALL server holdings including legacy positions** and logs
+  `startup_holdings_loaded` + a per-name `holdings_snapshot` (qty/avg/last/unrealised P&L) every
+  15 s; legacy holdings the model no longer wants are sold on the first day-bundle (exit floor
+  ₹5K). Check these events first when diagnosing "the bot is selling things I didn't expect".
+- Reconcile cadence 15 s; stage poll 10 s in simulation.
+- Logs are JSONL: `runs/live_*.jsonl` (stdout capture) + per-run journals
+  `runs/<timestamp>/journal.jsonl`. Analysis artifacts: `runs/_tradebook_analysis.md`,
+  `runs/_weight_optimization.md`, `runs/orderbook_full_*.json`.
+
 | Signal on dashboard | Action |
 |---------------------|--------|
 | Everything green | **Do nothing.** Take screenshots every 10 min for the defense. |
@@ -72,3 +92,35 @@ Earlier STCG +30,000 same FY → net STCG 20,000 → tax 3,000
 
 - Export: `runs/live/journal.jsonl`, equity curve PNG, trades CSV, latency histogram, tax summary.
 - Pick 3 trades to walk through in detail (one news long, one risk exit, one tax decision).
+
+## 7. How to run (Updated 2026-10-29)
+
+```powershell
+Set-Location C:\rev\app\Manthan-Hackathon
+$env:BOT_ACCESS_TOKEN = (Get-Content <path>\jwt.txt -Raw).Trim()   # token falls back to jwt.txt
+$env:TEAM_USERNAME    = "mn2632"
+$env:SERVER_IP        = "192.168.65.157"
+$env:HF_HUB_OFFLINE   = "1"          # FinBERT served offline from model2/finbert_cache/
+$env:TRANSFORMERS_OFFLINE = "1"
+
+python run_bot.py                    # interactive launcher:
+#   [1] KAFKA      — connect + ACK + trade on Kafka data only (no local/sim feeds)
+#   [2] SIMULATION — REST /api/v1/stocks/{t}/history polling ~1 req/s (≈72/min, under the
+#                    100/min budget), no Kafka; M2 neutral (no REST news endpoint)
+# flags: --mode kafka|simulation (skip prompt), --check (preflight checks only)
+
+# or non-interactive:
+python -m bot.main --env sandbox *> runs\live_$ts.jsonl
+```
+
+Observed boot sequence: M1(5)+M2(3)+M3(5) members load → universe (10 tickers) → backfill
+~1,920 candles → `kafka_connected` → preflight Ready (ACKs seq 1000+) → TRADING.
+
+Tests: `python -m pytest tests/ -q` → **170 passing**.
+
+## 8. PowerShell 5.1 quirks (Updated 2026-10-29)
+
+- Use `Invoke-WebRequest -UseBasicParsing` (no IE engine available).
+- **No `&&`** — use `;` or separate commands.
+- **No heredocs** — write files with `Set-Content` / `Out-File` or the editor.
+- Redirect both streams with `*> file` (used for the live JSONL logs above).

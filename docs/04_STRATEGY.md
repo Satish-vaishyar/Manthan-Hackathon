@@ -20,7 +20,7 @@ In backtests we track a **composite score**:
 | # | Hypothesis | Signal | Confidence |
 |---|-----------|--------|------------|
 | H1 | Significant news on day D drives the return on day D+1 (and drifts for 2–5 days) | News-impact model | High (news arrives after candle but fills at same close) |
-| H2 | Cross-sectional momentum (20–60 d) persists; very short-term (1–3 d) reverses | LightGBM ranker + rules | Medium |
+| H2 | Cross-sectional momentum (20–60 d) persists; very short-term (1–3 d) reverses | M1 CSTT ranker (Updated 2026-10-29 — ONNX ensemble, not LightGBM) + M3 DMN + rules | Medium |
 | H3 | In high-volatility, falling-breadth regimes, long exposure loses | Regime model | Medium |
 | H4 | Strong close location + volume surge confirms continuation | Rules overlay | Medium |
 
@@ -142,22 +142,36 @@ shares_i  = floor(w_i · equity / close_i)
 | Sandbox loop reset | Reset indicators; mark journal; don't panic-sell |
 | Missing candle for a held ticker | Hold; value at last known close |
 
-## 8. Parameters (all in `config.yaml`, frozen at code freeze)
+## 8. Parameters (all in `configs/default.yaml`)
 
-| Param | Default | Tuned range |
-|-------|---------|-------------|
-| `news_window_ms` | 400 | 250–600 |
-| `hard_deadline_ms` | 800 | — |
-| `top_k` | 8 | 5–12 |
-| `max_weight_name` | 0.15 | 0.10–0.20 |
-| `rebalance_threshold` | 0.025 | 0.015–0.05 |
-| `min_trade_notional` | 50000 | 25k–100k |
-| `max_orders_per_day` | 4 | 3–5 |
-| `event_long_threshold` | 0.6 | 0.4–0.8 |
-| `event_short_threshold` | −0.6 | −0.8 – −0.4 |
-| `stop_atr_mult` | 2.5 | 2–3.5 |
-| `dd_soft`, `dd_hard` | 8%, 15% | — |
-| `ltcg_wait_days` | 30 | 15–45 |
+**Updated 2026-10-29 — live values after tuning passes 1 + P3-14…P3-20** (rationale in WORK_LOG §5–§7):
+
+| Param | Live value | Note |
+|-------|-----------|------|
+| `news_window_ms` / `hard_deadline_ms` | 400 / 800 | unchanged |
+| `top_k` | **6** | was 8; concentration |
+| `max_weight_name` | 0.15 | per-name cap |
+| sector cap | 0.30 | per sector cluster |
+| `rebalance_threshold` | **0.05** | was 0.025 |
+| `min_trade_notional` | **₹75,000** | entries; was ₹50,000 |
+| `exit_min_notional` | **₹5,000** | exits — legacy positions stay sellable |
+| `max_orders_per_day` | 4 | largest-notional first |
+| `exclude_tickers` | **[BLUX]** | −₹27K post-mortem |
+| `event_long_threshold` / `event_short_threshold` | **+0.75 / −0.75** | was ±0.6 |
+| `stop_atr_mult` | **3.5** | was 2.5 |
+| `dd_soft`, `dd_hard` | **0.12, 0.15** | was 0.08/0.15 |
+| `risk.cash_buffer` | **0.02** | was 0.05 |
+| `risk.target_cash_utilization` | **0.85** | constructor scales weights toward 85% invested |
+| `risk.max_cash_per_trade` | **0.90** | validator rejects BUYs > 90% of cash |
+| `strategy.idle_cash_deploy` | enabled, epsilon 0.05 | deploys idle cash each 15 s reconcile |
+| `strategy.weights_mode` | `optimized` | loads `configs/optimized_weights.json` |
+| `strategy.rl_tuner` | enabled | UCB1 over 5 arms, optimized triple = arm 0 |
+| `timing.reconcile_interval_s` / `stage_poll_simulation_s` | **15 / 10** | was 30/30 |
+| `ltcg_wait_days` | 30 | unchanged |
+
+**Live results (Updated 2026-10-29):** baseline **+₹2.31L realized over ~168 sim-days**; tuned run
+**+₹1.51L in 40 min** (207 orders, **0 BLUX trades, 0 server rejections**). Full 400-order
+orderbook: `runs/orderbook_full_20261029T202525Z.json` (pulled via `/api/v1/orders?limit=10000`).
 
 ## 9. What we explicitly do NOT do
 

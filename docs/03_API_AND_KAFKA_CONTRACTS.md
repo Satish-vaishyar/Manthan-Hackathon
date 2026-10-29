@@ -100,7 +100,7 @@ Base: `http://<SERVER_IP>:3002/api/v1`. Auth header: `Authorization: Bearer <BOT
 | GET | `/portfolio/cash` | Bearer | Lightweight cash check |
 | GET | `/stocks` | Bearer | Active universe (ticker, symbol, name, description) |
 | GET | `/stocks/:ticker/history?days=N` | optional | Daily bars strictly before current sim date |
-| GET | `/stocks/history?ticker=X&days=N` | optional | Alternative form; also `start_date`, `end_date` |
+| GET | `/stocks/history?ticker=X&days=N` | optional | Alternative form; also `start_date`, `end_date`. **Updated 2026-10-29:** `/api/v1/stocks/{t}` itself 404s; only the `/history` form works |
 | GET | `/stage` | Public | Lifecycle stage and progress |
 | GET | `/simulation/clock` | Public | Current day, total days, remaining days |
 | POST | `/bot/heartbeat` | Bearer | Pre-flight ACK |

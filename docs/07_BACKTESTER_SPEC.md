@@ -74,3 +74,17 @@ improves the composite score in walk-forward tests **and** doesn't increase max 
 - Unit tests for every SimBroker rule with hand-computed cases (see doc 11).
 - **Parity test**: run the live bot in the sandbox for ≥ 200 days, then backtest the same recorded days
   with the same config; ledger equity must match the portal's within 0.5% (differences → investigate rule mismatch).
+
+## 8. Journal-driven research (Updated 2026-10-29)
+
+The live runs themselves became the research dataset: `runs/*/journal.jsonl` accumulates every
+per-ticker decision with scores. As of 2026-10-29 the corpus is **12,396 records (500 sim days ×
+10 tickers)** and feeds:
+
+- **Ensemble weight estimation** — `scripts/optimize_weights.py` builds signal/return panels from
+  the journals and writes `configs/optimized_weights.json` + `runs/_weight_optimization.md`
+  (see doc 05 §10).
+- **Tradebook post-mortems** — full orderbook pulls via `GET /api/v1/orders?limit=10000`
+  (the endpoint paginates at 50), e.g. `runs/orderbook_full_20261029T202525Z.json` (400 orders)
+  analysed in `runs/_tradebook_analysis.md` + `runs/_analyze.py`. Baseline: **+₹2.31L realized
+  over ~168 sim-days**; post-tuning run: **+₹1.51L in 40 min, 0 BLUX trades, 0 rejections**.
