@@ -1,0 +1,33 @@
+# model5 — Market Regime Detector (M5) config
+#
+# Loaded by bot/main.py via configs/default.yaml overlay. Tunable per env
+# (sandbox / live) without code edits. All thresholds are in normalised
+# daily-return / annualised-vol units.
+
+model5:
+  # Lookback windows (trading days)
+  market_window: 60         # market returns + realised vol
+  disp_window: 20           # cross-sectional dispersion
+
+  # Realised vol thresholds (annualised)
+  vol_low: 0.10             # below = risk_on candidate
+  vol_high: 0.30            # above = risk_off
+
+  # Cumulative-return thresholds over market_window (log units)
+  trend_up: 0.05            # +5% over 60d -> risk_on
+  trend_dn: -0.10           # -10% over 60d -> risk_off
+
+  # Cross-sectional dispersion threshold (std of daily returns across
+  # the universe, daily). 2.5% = "choppy / no clear direction".
+  disp_high: 0.025
+
+  # Warm-up: how many days of history before we trust the regime.
+  # During warm-up the detector returns 'neutral' (no opinion).
+  min_history_days: 20
+
+# Default gross long target per regime (multipliers in [0, 1]).
+# Matches docs/04 §4: risk_on=1.0, neutral=0.8, risk_off=0.5.
+gross_long_target:
+  risk_on: 1.00
+  neutral: 0.80
+  risk_off: 0.50

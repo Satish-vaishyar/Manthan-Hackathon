@@ -1,0 +1,3 @@
+# model4 — Realised Volatility (M4)
+# No training, no model artifact. Only the runtime deps it shares with bot/.
+structlog>=24.1.0

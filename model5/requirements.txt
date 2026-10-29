@@ -1,0 +1,3 @@
+# model5 — Market Regime Detector (M5)
+# No training, no model artifact. Only the runtime deps it shares with bot/.
+structlog>=24.1.0

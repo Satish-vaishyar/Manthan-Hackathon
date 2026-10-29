@@ -1,0 +1,19 @@
+# model4 — Realised Volatility (M4) config
+#
+# Loaded by bot/main.py via configs/default.yaml overlay (the bot
+# instantiates VolEstimator with these values directly). Tunable per env
+# (sandbox / live) without code edits.
+
+model4:
+  # Rolling-window length, in trading days. 20 is standard for short-term
+  # sizing; raise to 60 for slower-reacting, lower-variance estimates.
+  window: 20
+
+  # Annualised vol returned for tickers with < 5 returns (early-life or
+  # no history yet). 0.02 ≈ 32% annualised — a neutral default that
+  # neither dominates nor vanishes in the inverse-vol denominator.
+  fallback_vol: 0.02
+
+  # √N scaling: 252 for daily -> annualised. Don't change unless you
+  # switch to a different base frequency (e.g. 252√ for hourly).
+  annualisation_factor: 252.0
