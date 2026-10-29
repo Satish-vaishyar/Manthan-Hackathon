@@ -391,3 +391,16 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   re-entry blocked. Continuous-trail precursor (1226551) verified live: SONA +2.8% booked,
   HAVN cut at -5.5%.
 - Tests 232 passing.
+
+## 2026-10-30 (night) — Exit tournament, bandit seeding, symbol-agnostic, partial TP
+- **scripts/tune_exits.py**: 12-exit-strategy tournament over 744 round trips. Verdict: every
+  mechanical overlay (sl/tp/atr/trail/stepped/partial) LOSES vs native score-decay exits;
+  full TP -2.3L, stepped ladder -4.8L, cheapest = partial 25%@8% (-30K).
+- **Symbol-agnostic** (a75cc44): removed static BLUX blacklist — the only symbol-specific
+  runtime artifact. Universe/sectors are server-discovered; models are feature-based.
+- **Bandit boot-seeding** (6577b51): orderbook replay at boot (FIFO matcher, unit-tested)
+  so vetoes survive restarts. Seeded 719 trades; initially 6/10 vetoed incl. asymmetric
+  winners (ROUT +1.5L @ 3/13) -> utilisation collapse to 2 positions.
+- **Magnitude-aware veto + P3-25 partial TP** (6cd226f): veto now needs avg realised
+  <= -5000/trade AND z <= -0.55; partial take-profit books 25% once at +8%.
+- Tests: 239 passing.
