@@ -79,26 +79,33 @@ def test_trailing_sl_block_parsed() -> None:
     tsl = s.strategy.trailing_sl
     assert tsl is not None and tsl.enabled is True
     assert tsl.initial_pct == pytest.approx(0.10)
-    assert tsl.trail_pct == pytest.approx(0.05)
+    assert tsl.breakeven_trigger_pct == pytest.approx(0.03)
+    assert tsl.lock_start_pct == pytest.approx(0.05)
+    assert tsl.first_lock_pct == pytest.approx(0.03)
+    assert tsl.step_pct == pytest.approx(0.02)
 
 
-def test_trailing_sl_ratchet_math() -> None:
-    """stop = max(entry*(1-init), peak*(1-trail)) with trail above entry only."""
-    entry, init, trail = 100.0, 0.10, 0.05
+def test_trailing_sl_stepped_math() -> None:
+    """User spec: -10% initial; +3% gain -> breakeven; +5% -> +3%; +2% steps."""
+    import math
 
-    def _stop(peak: float) -> float:
-        s = entry * (1 - init)
-        if peak > entry:
-            s = max(s, peak * (1 - trail))
-        return s
+    def _stop(entry: float, peak: float) -> float:
+        gain = (peak - entry) / entry
+        if gain >= 0.05:
+            locked = 0.03 + 0.02 * math.floor((gain - 0.05) / 0.02)
+            return entry * (1 + locked)
+        if gain >= 0.03:
+            return entry
+        return entry * 0.90
 
-    # At entry: stop is the initial -10% (trail leg must NOT tighten it).
-    assert _stop(entry) == pytest.approx(90.0)
-    # Peak 130: trail stop = 123.5 -> ratcheted up, locks +23.5%.
-    assert _stop(130.0) == pytest.approx(123.5)
-    # Peak 105 (just above entry): trail stop 99.75 still below initial? No:
-    # 105*0.95 = 99.75 > 90 -> ratchets up but stays under entry (loss < 10%).
-    assert _stop(105.0) == pytest.approx(99.75)
-    # Once ratcheted, a lower peak never lowers the stop.
-    ratcheted = _stop(130.0)
-    assert max(ratcheted, _stop(110.0)) == ratcheted
+    e = 100.0
+    assert _stop(e, 100.0) == pytest.approx(90.0)   # at entry: -10%
+    assert _stop(e, 102.9) == pytest.approx(90.0)   # +2.9%: still -10%
+    assert _stop(e, 103.0) == pytest.approx(100.0)  # +3%: breakeven
+    assert _stop(e, 104.9) == pytest.approx(100.0)  # +4.9%: still breakeven
+    assert _stop(e, 105.0) == pytest.approx(103.0)  # +5%: lock +3%
+    assert _stop(e, 106.9) == pytest.approx(103.0)  # +6.9%: still +3%
+    assert _stop(e, 107.0) == pytest.approx(105.0)  # +7%: lock +5%
+    assert _stop(e, 130.0) == pytest.approx(127.0)  # +30%: lock +27%
+    # Ratchet: peak stored, stop computed off peak — pullback doesn't lower it.
+    assert _stop(e, 130.0) > _stop(e, 110.0)

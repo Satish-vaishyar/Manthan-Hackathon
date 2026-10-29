@@ -1190,15 +1190,30 @@ class TradingBot:
                     server_h[t] = int(server_h.get(t, 0)) - qty
                 tp_exits.add(t)
 
-        # P3-24: trailing stop-loss — stop = max(entry*(1-initial_pct),
-        # peak_since_entry*(1-trail_pct)); ratchets UP only. Books the max
-        # possible profit: losers are cut at -10%, winners keep running
-        # until they give back `trail_pct` from their peak.
+        # P3-24: stepped trailing stop-loss (ratchets up, never lowers):
+        #   peak gain < +3%  -> stop at entry - 10%
+        #   peak gain >= +3% -> stop at breakeven (buy price)
+        #   peak gain >= +5% -> stop at entry+3%, then +2% steps behind the
+        #                       peak (+7% peak -> +5%, +9% -> +7%, ...)
         tsl_cfg = getattr(self.settings.strategy, "trailing_sl", None)
         if tsl_cfg is not None and bool(getattr(tsl_cfg, "enabled", False)) \
                 and not self.settings.dry_run:
+            import math as _math
             init_pct = float(getattr(tsl_cfg, "initial_pct", 0.10) or 0.10)
-            trail_pct = float(getattr(tsl_cfg, "trail_pct", 0.05) or 0.05)
+            be_trig = float(getattr(tsl_cfg, "breakeven_trigger_pct", 0.03) or 0.03)
+            lock_start = float(getattr(tsl_cfg, "lock_start_pct", 0.05) or 0.05)
+            first_lock = float(getattr(tsl_cfg, "first_lock_pct", 0.03) or 0.03)
+            step_pct = float(getattr(tsl_cfg, "step_pct", 0.02) or 0.02)
+
+            def _stepped_stop(entry: float, peak: float) -> float:
+                gain = (peak - entry) / entry
+                if gain >= lock_start:
+                    locked = first_lock + step_pct * _math.floor(
+                        (gain - lock_start) / step_pct)
+                    return entry * (1.0 + locked)
+                if gain >= be_trig:
+                    return entry
+                return entry * (1.0 - init_pct)
             for t in list(self._trail_peak):
                 if not self.ledger.lots.get(t):
                     del self._trail_peak[t]  # flat — reset the trail
@@ -1211,13 +1226,7 @@ class TradingBot:
                     continue
                 peak = max(float(self._trail_peak.get(t, entry)), px)
                 self._trail_peak[t] = peak
-                # Initial stop at -initial_pct from entry; the trail leg
-                # engages only once price has exceeded entry (otherwise
-                # entry*(1-trail_pct) would be TIGHTER than the initial
-                # stop and cut positions at -5% instead of -10%).
-                stop = entry * (1.0 - init_pct)
-                if peak > entry:
-                    stop = max(stop, peak * (1.0 - trail_pct))
+                stop = _stepped_stop(entry, peak)
                 if px > stop:
                     continue
                 qty = sum(int(l.qty) for l in lots)

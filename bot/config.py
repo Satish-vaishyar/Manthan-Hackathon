@@ -199,15 +199,22 @@ class DisagreementGateSettings:
 
 @dataclass
 class TrailingSLSettings:
-    """Trailing stop-loss for longs.
+    """Stepped trailing stop-loss for longs (ratchets up, never lowers).
 
-    stop = max(entry*(1 - initial_pct), peak_since_entry*(1 - trail_pct))
-    The stop ratchets UP as price makes new highs and never lowers, so a
-    winner keeps running while progressively more profit is locked in.
-    Exit when the day's close <= stop."""
+    Peak gain (from FIFO entry) maps to a stop level in steps:
+      gain < breakeven_trigger_pct        -> stop = entry*(1 - initial_pct)
+      gain >= breakeven_trigger_pct       -> stop = entry (breakeven)
+      gain >= lock_start_pct              -> stop = entry*(1 + locked),
+        locked = first_lock_pct + step_pct*floor((gain-lock_start_pct)/step_pct)
+    e.g. defaults: -10% initial; +3% gain -> SL at buy price; +5% -> buy+3%;
+    +7% -> buy+5%; +9% -> buy+7%; ... (always 2% locked behind the peak).
+    """
     enabled: bool = False
     initial_pct: float = 0.10
-    trail_pct: float = 0.05
+    breakeven_trigger_pct: float = 0.03
+    lock_start_pct: float = 0.05
+    first_lock_pct: float = 0.03
+    step_pct: float = 0.02
 
 
 @dataclass
@@ -491,7 +498,10 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
             s.strategy.trailing_sl = TrailingSLSettings(
                 enabled=bool(ts_block.get("enabled", False)),
                 initial_pct=float(ts_block.get("initial_pct", 0.10) or 0.10),
-                trail_pct=float(ts_block.get("trail_pct", 0.05) or 0.05),
+                breakeven_trigger_pct=float(ts_block.get("breakeven_trigger_pct", 0.03) or 0.03),
+                lock_start_pct=float(ts_block.get("lock_start_pct", 0.05) or 0.05),
+                first_lock_pct=float(ts_block.get("first_lock_pct", 0.03) or 0.03),
+                step_pct=float(ts_block.get("step_pct", 0.02) or 0.02),
             )
         if "mom_horizon_weights" in (merged.get("strategy") or {}):
             mhw = merged["strategy"].get("mom_horizon_weights")

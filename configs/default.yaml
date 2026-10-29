@@ -86,13 +86,19 @@ strategy:
   # trailing stop books max possible profit: winners run past +10% while
   # the stop ratchets up behind them).
   take_profit_pct: 0.0
-  # P3-24: trailing stop-loss — initial stop at -10% from entry; as profit
-  # grows the stop trails the peak close by 5% and never lowers. Losers cut
-  # at -10%, winners run until they give back 5% from their peak.
+  # P3-24: STEPPED trailing stop-loss (user-spec 2026-10-30), ratchets up
+  # only, computed off the peak close since entry:
+  #   gain < +3%   -> SL at entry - 10%
+  #   gain >= +3%  -> SL at buy price (breakeven)
+  #   gain >= +5%  -> SL at buy + 3%
+  #   gain >= +7%  -> SL at buy + 5%   ... always 2% locked behind the peak.
   trailing_sl:
     enabled: true
     initial_pct: 0.10
-    trail_pct: 0.05
+    breakeven_trigger_pct: 0.03
+    lock_start_pct: 0.05
+    first_lock_pct: 0.03
+    step_pct: 0.02
   # --- Strategy improvements (2026-10-29) — each individually disable-able ---
   # Multi-horizon momentum blend: 5d/10d/20d vol-normalised log-return
   # z-scores replace the single-horizon mom sub-score. Remove the block (or
