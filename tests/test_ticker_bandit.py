@@ -101,6 +101,46 @@ def test_take_profit_knob_default_off() -> None:
     assert s.strategy.take_profit_pct == 0.0  # code default; YAML sets 0.10
 
 
+def test_fifo_realised_seed_math() -> None:
+    """Orderbook -> per-ticker realised P&L rows used to seed the bandit."""
+    from bot.main import TradingBot
+    orders = [
+        {"ticker": "AAA", "action": "BUY", "quantity": 10,
+         "execution_price": 100.0, "status": "FILLED", "simulated_date": "2026-01-01"},
+        {"ticker": "AAA", "action": "BUY", "quantity": 10,
+         "execution_price": 110.0, "status": "FILLED", "simulated_date": "2026-01-02"},
+        {"ticker": "AAA", "action": "SELL", "quantity": 15,
+         "execution_price": 120.0, "status": "FILLED", "simulated_date": "2026-01-03"},
+        {"ticker": "BBB", "action": "SELL", "quantity": 5,
+         "execution_price": 50.0, "status": "FILLED", "simulated_date": "2026-01-03"},
+        {"ticker": "AAA", "action": "SELL", "quantity": 5,
+         "execution_price": 90.0, "status": "REJECTED", "simulated_date": "2026-01-04"},
+    ]
+    rows = TradingBot._fifo_realised(orders)
+    # FIFO: 10@(120-100)=200 then 5@(120-110)=50. BBB has no open lot (short
+    # side ignored); REJECTED order ignored.
+    assert [(t, round(p)) for t, p, _ in rows] == [("AAA", 200), ("AAA", 50)]
+    assert all(d == "2026-01-03" for _, _, d in rows)
+
+
+def test_seeded_bandit_vetoes_chronic_loser() -> None:
+    """Boot-seeding must immediately veto a 0-win chronic loser."""
+    from bot.main import TradingBot
+    orders = []
+    for i in range(6):
+        d = f"2026-01-{10 + i:02d}"
+        orders.append({"ticker": "ZZZ", "action": "BUY", "quantity": 10,
+                       "execution_price": 100.0, "status": "FILLED",
+                       "simulated_date": f"2026-01-{i + 1:02d}"})
+        orders.append({"ticker": "ZZZ", "action": "SELL", "quantity": 10,
+                       "execution_price": 95.0, "status": "FILLED",
+                       "simulated_date": d})
+    b = _bandit()
+    for t, pnl, day in TradingBot._fifo_realised(orders):
+        b.observe(t, pnl, day=day)
+    assert b.is_vetoed("ZZZ") is True
+
+
 def test_take_profit_knob_from_yaml() -> None:
     s = load_settings("configs/default.yaml")
     # Disabled in YAML: superseded by trailing_sl (P3-24).

@@ -466,6 +466,9 @@ class TradingBot:
         # the trained models can produce scores from day 1.
         await self._backfill_ring_buffer()
         await self._reconcile()
+        # Seed the ticker bandit from the server orderbook so chronic-loser
+        # vetoes survive restarts (bandit state is in-memory otherwise).
+        await self._seed_bandit_from_orderbook()
         await self.kafka.start()
         await self.assembler.start()
         await self.heartbeat.start()
@@ -622,6 +625,66 @@ class TradingBot:
                   ok_tickers=ok_tickers,
                   total_candles=total_candles,
                   component="main")
+
+    # ------------------------------------------------------------------
+    # Bandit boot-seeding from the server orderbook
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _fifo_realised(orders: list[dict]) -> list[tuple[str, float, object]]:
+        """FIFO-match FILLED BUY->SELL per ticker; return (ticker, gross_pnl,
+        sell_sim_date) per closed lot. Pure — unit-tested. Used to seed the
+        ticker bandit from the server orderbook so chronic losers are vetoed
+        from the first trade instead of re-learning after every restart."""
+        from collections import defaultdict as _dd
+        lots: dict[str, list[list]] = _dd(list)
+        out: list[tuple[str, float, object]] = []
+        for o in sorted(orders, key=lambda x: (x.get("simulated_date") or "",
+                                               x.get("ticker") or "")):
+            if o.get("status") != "FILLED":
+                continue
+            t = o.get("ticker")
+            act = (o.get("action") or "").upper()
+            q = float(o.get("quantity") or 0)
+            p = float(o.get("execution_price") or 0)
+            if not t or q <= 0 or p <= 0:
+                continue
+            if act == "BUY":
+                lots[t].append([q, p])
+            elif act == "SELL":
+                rem = q
+                while rem > 1e-9 and lots[t]:
+                    lot = lots[t][0]
+                    take = min(lot[0], rem)
+                    out.append((t, take * (p - lot[1]), o.get("simulated_date")))
+                    lot[0] -= take
+                    rem -= take
+                    if lot[0] <= 1e-9:
+                        lots[t].pop(0)
+        return out
+
+    async def _seed_bandit_from_orderbook(self) -> None:
+        """Replay the account's order history into the ticker bandit at boot.
+
+        The bandit's edge estimates are in-memory; without seeding, every
+        restart resets them and chronic losers (e.g. 0/10 winners on one
+        name) keep getting bought until the veto re-accumulates. Server
+        orderbook is the ground truth; on a fresh evaluation account this
+        is simply a no-op (empty history)."""
+        if self.ticker_bandit is None:
+            return
+        try:
+            raw = await self.api.get("/api/v1/orders?limit=10000")
+            orders = (raw.get("orders") if isinstance(raw, dict) else raw) or []
+            realised = self._fifo_realised(orders)
+            for ticker, pnl, day in realised:
+                self.ticker_bandit.observe(ticker, pnl, day=day)
+            vetoed = [t for t in {t for t, _, _ in realised}
+                      if self.ticker_bandit.is_vetoed(t)]
+            _log.info("ticker_bandit_seeded", trades=len(realised),
+                      tickers=len({t for t, _, _ in realised}),
+                      vetoed=sorted(vetoed), component="main")
+        except Exception as e:  # noqa: BLE001
+            _log.warning("ticker_bandit_seed_failed", err=repr(e), component="main")
 
     # ------------------------------------------------------------------
     # Reconciliation
