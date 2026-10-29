@@ -1094,6 +1094,16 @@ class TradingBot:
                 getattr(self.settings.risk, "target_cash_utilization", 0.85) or 0.85
             ),
         )
+        # Mirror the constructor's relaxed per-name cap into the validator so
+        # utilization-scaled orders aren't denied RISK_NAME_CAP downstream
+        # (live bug 2026-10-30: constructor said 31.67%, risk cap said 20%,
+        # 100% of BUYs internally rejected -> cash sat idle).
+        if target_w:
+            _tu = float(getattr(self.settings.risk, "target_cash_utilization", 0.85) or 0.85)
+            _static = float(getattr(self.settings.strategy, "max_weight_name", 1.0) or 1.0)
+            self.validator.name_cap_override = min(1.0, max(_static, _tu / max(len(target_w), 1)))
+        else:
+            self.validator.name_cap_override = None
         max_orders_remaining = await self.lifecycle.gate.orders_remaining(max_orders)
         deltas = build_trade_deltas(
             current_holdings={t: q for t, q in self.ledger.holdings.items()},

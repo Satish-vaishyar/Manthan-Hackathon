@@ -51,6 +51,10 @@ class OrderValidator:
         # using the last known close price; release on clear_in_flight().
         self._reserved_cash: float = 0.0
         self._reserved_by_key: dict[tuple[str, str, int], float] = {}
+        # Per-day per-name cap mirror: main sets this to the constructor's
+        # relaxed cap (max(static, target_util / n_qualifying)) so utilization
+        # orders aren't denied RISK_NAME_CAP by a stricter static check.
+        self.name_cap_override: Optional[float] = None
 
     def validate(
         self,
@@ -127,8 +131,12 @@ class OrderValidator:
             return ValidationResult.deny(RejectCode.INSUFFICIENT_CASH,
                 f"notional {notional:.0f} > max_cash_per_trade cap {cap:.0f} "
                 f"({float(getattr(self.settings.risk, 'max_cash_per_trade', 0.90)):.0%} of cash)")
-        # Risk: per-name / sector / cash buffer
-        v = self.risk.check_buy(ledger, req.ticker, req.quantity, price, req.date)
+        # Risk: per-name / sector / cash buffer. `name_cap_override` is set
+        # by main each day to mirror the constructor's relaxed per-name cap
+        # (few qualifying names vs utilization target) so the two layers
+        # agree; None = static settings cap.
+        v = self.risk.check_buy(ledger, req.ticker, req.quantity, price, req.date,
+                                name_cap_override=self.name_cap_override)
         if not v.ok:
             return ValidationResult.deny(v.code or RejectCode.RISK_LIMIT, v.message or "risk check failed")
         return ValidationResult.allow()

@@ -100,20 +100,28 @@ class RiskManager:
         today: _date,
         sector: Optional[str] = None,
         sector_exposures: Optional[dict[str, float]] = None,
+        name_cap_override: Optional[float] = None,
     ) -> RiskVerdict:
         """BUY checks: post-trade per-name cap, sector cap (if given), and
         cash buffer (the greater of cash_buffer*equity and 15% of short
-        notional must remain after the trade)."""
+        notional must remain after the trade).
+
+        name_cap_override: when the constructor relaxes the per-name cap
+        (few qualifying names vs the utilization target — see
+        build_target_weights), main passes the SAME relaxed cap here so the
+        two layers agree; without it every utilization-scaled order was
+        denied with RISK_NAME_CAP (observed live 2026-10-30)."""
         notional = qty * price
         equity = ledger.equity or 1.0
+        cap = name_cap_override if name_cap_override is not None else self.settings.max_name_weight
         # Per-name cap on POST-trade weight for THIS ticker
         cur_qty = ledger.holdings.get(ticker, 0)
         cur_w = (cur_qty * price) / equity if equity > 0 else 0
         new_exposure = cur_w * equity + notional
         new_w = new_exposure / equity if equity > 0 else 0
-        if new_w > self.settings.max_name_weight:
+        if new_w > cap:
             return RiskVerdict.deny("RISK_NAME_CAP",
-                f"{ticker}: post-trade weight {new_w:.2%} > cap {self.settings.max_name_weight:.2%}")
+                f"{ticker}: post-trade weight {new_w:.2%} > cap {cap:.2%}")
         # Sector cap
         if sector is not None and sector_exposures is not None:
             sec_w = sector_exposures.get(sector, 0.0) * equity
