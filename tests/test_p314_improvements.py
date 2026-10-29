@@ -26,7 +26,7 @@ def test_min_notional_raised(monkeypatch) -> None:
 
 def test_target_cash_utilization_default(monkeypatch) -> None:
     s = _settings(monkeypatch)
-    assert s.risk.target_cash_utilization == pytest.approx(0.85)
+    assert s.risk.target_cash_utilization == pytest.approx(0.95)  # raised 2026-10-30
 
 
 def test_max_cash_per_trade_default(monkeypatch) -> None:

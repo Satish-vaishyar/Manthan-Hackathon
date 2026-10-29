@@ -32,8 +32,8 @@ strategy:
   optimized_weights_path: configs/optimized_weights.json
   # Static fallback (fine-tuned 2026-10-29 from tradebook post-mortem).
   weights: { rank: 0.55, news: 0.20, mom: 0.25 }
-  top_k: 6
-  max_weight_name: 0.15
+  top_k: 8  # 2026-10-30: was 6; 10-name universe (9 eligible w/ BLUX blacklist) under-filled the book
+  max_weight_name: 0.20  # was 0.15: capped real utilization ~40% after vol sizing
   rebalance_threshold: 0.05
   # P3-14: raised from 50k -> 75k so we concentrate capital, charge fewer
   # brokerage events per Rs moved, and pay 0.05% per side instead of 0.07%.
@@ -42,7 +42,7 @@ strategy:
   # previous runs must be sellable whenever the model no longer wants them,
   # even if below the 75K entry floor.
   exit_min_notional: 5000
-  max_orders_per_day: 4
+  max_orders_per_day: 8  # was 4: deployment took multiple sim days; churn now controlled by min_hold_days
   # Higher conviction bar — fewer low-conv BLUX-style churn trades.
   event_long_threshold: 0.75
   event_short_threshold: -0.75
@@ -124,7 +124,7 @@ risk:
   # P3-14: target cash utilisation (long_mv / equity). When below target,
   # the constructor inflates gross exposure; when above, deflates. Keeps
   # 80-90% of the wallet invested most of the time.
-  target_cash_utilization: 0.85
+  target_cash_utilization: 0.95  # was 0.85; cash_buffer 0.02 + server clamps still guard margin
   # P3-14: cap a single BUY at this fraction of available cash to avoid
   # INSUFFICIENT_CAPITAL rejections (was 99% of cash on one trade).
   max_cash_per_trade: 0.90
