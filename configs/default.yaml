@@ -82,7 +82,11 @@ strategy:
   # day's top-2 ensemble scores AND >= its own 20-sim-day median score
   # (median of available days once >= 3; fewer -> gate no-ops).
   entry_timing:
-    enabled: true
+    # DISABLED 2026-10-30 after live diagnosis: combined with fresh_entry_only
+    # it starved 100% of entries on the 10-name universe (persistent top-3
+    # membership means nothing ever qualifies as "fresh", and high scorers
+    # sat below their own trailing median). 0 order flow observed.
+    enabled: false
     top_n: 2
     lookback_days: 20
     min_history: 3
@@ -101,7 +105,10 @@ strategy:
   # Fresh entry only: a ticker enters the target book only if it newly
   # entered the top-3 today (wasn't in yesterday's top-3 by score).
   # Existing holdings are unaffected (exits/rebalances proceed normally).
-  fresh_entry_only: true
+  # DISABLED 2026-10-30: on a small stable universe the top-3 rarely churns,
+  # so this vetoed every BUY indefinitely (live diag: fresh_entry_blocked
+  # on 100% of candidates, zero orders placed).
+  fresh_entry_only: false
 
 risk:
   # Wider ATR stop so we don't get shaken out of mid-band winners on 1-2d dips.
