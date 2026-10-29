@@ -166,6 +166,12 @@ class StrategySettings:
     mean_reversion_in_risk_off: bool = False
     # Only BUY tickers that newly entered the top-3 today.
     fresh_entry_only: bool = False
+    # P3-22: per-ticker RL bandit — penalise chronic losers (score multiplier
+    # toward `floor`), mildly reward consistent winners (capped at `cap`).
+    ticker_bandit: "TickerBanditSettings" = None  # type: ignore[assignment]
+    # P3-23: take-profit — SELL a long whose unrealised gain from FIFO entry
+    # reaches this fraction (0 disables). 0.10 = lock in +10% winners.
+    take_profit_pct: float = 0.0
 
 
 @dataclass
@@ -186,6 +192,21 @@ class DisagreementGateSettings:
     |scores| exceed `threshold` (strong disagreement)."""
     enabled: bool = False
     threshold: float = 0.1
+
+
+@dataclass
+class TickerBanditSettings:
+    """Per-ticker reward/penalty bandit (see bot/portfolio/rl_tuner.py).
+
+    multiplier = clamp(1 + strength * EMA(pnl)/EMA(|pnl|), floor, cap).
+    Bounded both ways: losers get rotated away from, winners get at most a
+    `cap` boost — no gambling on streaks."""
+    enabled: bool = False
+    ema_alpha: float = 0.35
+    strength: float = 0.5
+    floor: float = 0.5
+    cap: float = 1.15
+    min_obs: int = 2
 
 
 @dataclass
@@ -438,6 +459,16 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
             s.strategy.disagreement_gate = DisagreementGateSettings(
                 enabled=bool(dg_block.get("enabled", False)),
                 threshold=float(dg_block.get("threshold", 0.1) or 0.1),
+            )
+        tb_block = strat.pop("ticker_bandit", None)
+        if tb_block is not None:
+            s.strategy.ticker_bandit = TickerBanditSettings(
+                enabled=bool(tb_block.get("enabled", False)),
+                ema_alpha=float(tb_block.get("ema_alpha", 0.35) or 0.35),
+                strength=float(tb_block.get("strength", 0.5) or 0.5),
+                floor=float(tb_block.get("floor", 0.5) or 0.5),
+                cap=float(tb_block.get("cap", 1.15) or 1.15),
+                min_obs=int(tb_block.get("min_obs", 2) or 2),
             )
         if "mom_horizon_weights" in (merged.get("strategy") or {}):
             mhw = merged["strategy"].get("mom_horizon_weights")

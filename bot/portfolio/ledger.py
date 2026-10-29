@@ -173,6 +173,7 @@ class Ledger:
         dq = self.lots[ticker]
         remaining = qty
         proceeds = 0.0
+        realised_net = 0.0
         while remaining > 0 and dq:
             lot = dq[0]
             take = min(remaining, lot.qty)
@@ -191,13 +192,15 @@ class Ledger:
             ))
             lot.qty -= take
             lot.fees -= lot_fees
+            realised_net += pnl - total_fees_for_line
             if lot.qty == 0:
                 dq.popleft()
             remaining -= take
         # Cash: proceeds + release of buy-fees (already spent, so add back the lot's share)
         self.cash += proceeds - brokerage - dp_charge
         self.last_close[ticker] = price
-        return {"sold": qty, "proceeds": proceeds - brokerage - dp_charge}
+        return {"sold": qty, "proceeds": proceeds - brokerage - dp_charge,
+                "realised": realised_net}
 
     def apply_short(self, ticker: str, qty: int, price: float, fill_date: _date,
                     brokerage: float, dp_charge: float) -> dict:

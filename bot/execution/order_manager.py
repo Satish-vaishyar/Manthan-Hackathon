@@ -53,6 +53,7 @@ class OrderManager:
         ledger: Ledger,
         journal: "DecisionJournal",
         on_state_divergence=None,
+        ticker_bandit=None,
     ) -> None:
         self.settings = settings
         self.api = api
@@ -60,6 +61,9 @@ class OrderManager:
         self.validator = validator
         self.ledger = ledger
         self.journal = journal
+        # P3-22: optional per-ticker RL bandit — fed realised P&L on every
+        # SELL/COVER fill so chronic losers get penalised in future scores.
+        self.ticker_bandit = ticker_bandit
         # P3-20: async callable invoked whenever the server state may have
         # diverged from our local ledger (unparseable/empty order response,
         # 4xx rejection). main wires this to an immediate _reconcile().
@@ -262,11 +266,15 @@ class OrderManager:
         if resp.action == "BUY":
             self.ledger.apply_buy(resp.ticker, resp.quantity, resp.price, resp.date, b, d)
         elif resp.action == "SELL":
-            self.ledger.apply_sell(resp.ticker, resp.quantity, resp.price, resp.date, b, d)
+            res = self.ledger.apply_sell(resp.ticker, resp.quantity, resp.price, resp.date, b, d)
+            if self.ticker_bandit is not None:
+                self.ticker_bandit.observe(resp.ticker, float(res.get("realised", 0.0)))
         elif resp.action == "SHORT":
             self.ledger.apply_short(resp.ticker, resp.quantity, resp.price, resp.date, b, d)
         elif resp.action == "COVER":
-            self.ledger.apply_cover(resp.ticker, resp.quantity, resp.price, resp.date, b, d)
+            res = self.ledger.apply_cover(resp.ticker, resp.quantity, resp.price, resp.date, b, d)
+            if self.ticker_bandit is not None:
+                self.ticker_bandit.observe(resp.ticker, float(res.get("realised", 0.0)))
 
     # ------------------------------------------------------------------
     # Journal helpers

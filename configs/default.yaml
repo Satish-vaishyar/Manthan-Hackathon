@@ -71,6 +71,21 @@ strategy:
   idle_cash_deploy:
     enabled: true
     epsilon: 0.05
+  # P3-22: per-ticker RL bandit — every realised SELL/COVER updates an EMA of
+  # that ticker's P&L; score multiplier = clamp(1 + strength*z, floor, cap).
+  # Chronic losers get penalised toward 0.5 (capital rotates to other names),
+  # consistent winners get at most a 1.15x boost (no gambling on streaks).
+  ticker_bandit:
+    enabled: true
+    ema_alpha: 0.35
+    strength: 0.5
+    floor: 0.5
+    cap: 1.15
+    min_obs: 2
+  # P3-23: take-profit — SELL any long up >=10% from FIFO entry. Winners
+  # were riding 30+ days and round-tripping back to losses while losers
+  # exited fast; lock the gain instead. Same-day re-entry is blocked.
+  take_profit_pct: 0.10
   # --- Strategy improvements (2026-10-29) — each individually disable-able ---
   # Multi-horizon momentum blend: 5d/10d/20d vol-normalised log-return
   # z-scores replace the single-horizon mom sub-score. Remove the block (or

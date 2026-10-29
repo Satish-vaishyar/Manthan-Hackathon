@@ -67,7 +67,7 @@ from .portfolio.constructor import (
 )
 from .portfolio.ledger import Ledger
 from .portfolio.risk import RiskManager
-from .portfolio.rl_tuner import RLTuner, build_tuner_from_settings
+from .portfolio.rl_tuner import RLTuner, build_tuner_from_settings, build_bandit_from_settings
 from .portfolio.settlement import SettlementCalendar
 from .portfolio.tax_engine import TaxEngineConfig
 from .features import RingBuffer, build_model1_features, build_model3_features
@@ -204,6 +204,13 @@ class TradingBot:
             _log.info("rl_tuner_ready", n_arms=len(self.rl_tuner.arms),
                       current=self.rl_tuner.current_weights(), component="main")
 
+        # P3-22: per-ticker RL bandit — penalises chronic losers / mildly
+        # rewards consistent winners via a bounded score multiplier, fed by
+        # realised P&L on every SELL/COVER fill (see order_manager).
+        self.ticker_bandit = build_bandit_from_settings(settings.strategy)
+        if self.ticker_bandit is not None:
+            _log.info("ticker_bandit_ready", component="main")
+
         self.signals = SignalsBundle(
             tagger=self.event_tagger,
             volatility=self.volatility,
@@ -228,6 +235,7 @@ class TradingBot:
             ledger=self.ledger,
             journal=self.journal,
             on_state_divergence=self._on_state_divergence,
+            ticker_bandit=self.ticker_bandit,
         )
         self._stop = asyncio.Event()
         self._tasks: list[asyncio.Task] = []
@@ -1070,8 +1078,18 @@ class TradingBot:
         scores_for_constructor: list[TickerScore] = []
         for e in evals:
             price = bundle.ticks[e.ticker].close if e.ticker in bundle.ticks else 0.0
+            score = e.score
+            # P3-22: per-ticker RL bandit — penalise chronic losers (mult
+            # toward floor) and mildly reward consistent winners (capped).
+            if self.ticker_bandit is not None:
+                mult = self.ticker_bandit.multiplier(e.ticker)
+                if abs(mult - 1.0) > 1e-9:
+                    _log.info("ticker_bandit_adjust", ticker=e.ticker,
+                              raw=round(score, 4), mult=round(mult, 3),
+                              adjusted=round(score * mult, 4), component="main")
+                    score *= mult
             scores_for_constructor.append(TickerScore(
-                ticker=e.ticker, score=e.score,
+                ticker=e.ticker, score=score,
                 vol=self.signals.volatility.vol(e.ticker),
                 sector=self._sector_of.get(e.ticker),
                 price=price,
@@ -1127,6 +1145,48 @@ class TradingBot:
             short_allowed=short_allowed,
         )
 
+        # P3-23: take-profit — a long that gained >= take_profit_pct from its
+        # FIFO entry is SOLD here, instead of riding back down until the
+        # score decays. Winners were being held 30+ days and giving profits
+        # back while losers exited fast. The sold ticker is barred from
+        # re-entry for the rest of the day (no same-day round-trip churn).
+        tp_pct = float(getattr(self.settings.strategy, "take_profit_pct", 0.0) or 0.0)
+        tp_exits: set[str] = set()
+        if tp_pct > 0 and not self.settings.dry_run:
+            for t, lots in list(self.ledger.lots.items()):
+                if not lots or t not in bundle.ticks:
+                    continue
+                entry = float(lots[0].price)
+                px = float(bundle.ticks[t].close)
+                if entry <= 0 or (px - entry) / entry < tp_pct:
+                    continue
+                qty = sum(int(l.qty) for l in lots)
+                server_h = getattr(self, "_server_holdings", None)
+                if server_h is not None:
+                    qty = min(qty, max(0, int(server_h.get(t, 0))))
+                if qty <= 0:
+                    continue
+                remaining_tp = await self.lifecycle.gate.orders_remaining(max_orders)
+                # Keep at least one slot for the regular deltas below.
+                if remaining_tp <= 1:
+                    break
+                _log.info("take_profit_exit", ticker=t, qty=qty,
+                          entry=round(entry, 2), px=round(px, 2),
+                          gain_pct=round((px - entry) / entry * 100, 1),
+                          component="main")
+                await self.order_manager.submit(
+                    OrderRequest(ticker=t, action="SELL", quantity=qty,
+                                 date=bundle.simulated_date,
+                                 reason=f"take_profit +{(px-entry)/entry:.1%}"),
+                    scores={"ensemble": 0.0},
+                    reasons=["take_profit",
+                             f"regime={regime_label}"],
+                )
+                await self.lifecycle.gate.record_order()
+                if server_h is not None:
+                    server_h[t] = int(server_h.get(t, 0)) - qty
+                tp_exits.add(t)
+
         # 5) Execute trades
         min_hold = int(getattr(self.settings.strategy, "min_hold_days", 0) or 0)
         from .signals.overlays import passes_entry_timing, strong_disagreement
@@ -1159,6 +1219,11 @@ class TradingBot:
                               component="main")
                     continue
             if d.action == "BUY":
+                # P3-23: never re-enter a name we took profit on today.
+                if d.ticker in tp_exits:
+                    _log.info("take_profit_reentry_blocked", ticker=d.ticker,
+                              component="main")
+                    continue
                 ev_gate = next((e for e in evals if e.ticker == d.ticker), None)
                 # Ensemble disagreement gate: veto BUYs where rank and mom
                 # strongly disagree in sign. Journaled as HOLD with reason

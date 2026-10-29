@@ -185,6 +185,90 @@ class RLTuner:
         }
 
 
+@dataclass
+class TickerBandit:
+    """Per-ticker reward/penalty tracker (exponential bandit).
+
+    Every realised SELL/COVER feeds `observe(ticker, pnl)`. The bandit
+    keeps an EMA of the ticker's P&L and of |P&L|; their ratio is a
+    bounded "edge" estimate z ∈ [-1, 1]. `multiplier(ticker)` maps it to a
+    score multiplier in [floor, cap]:
+
+        mult = clamp(1 + strength * z, floor, cap)
+
+    Losers (z → -1) get penalised toward `floor` so capital rotates AWAY
+    from chronic losers; winners (z → +1) get a mild boost capped at `cap`
+    so the book can't gamble on a lucky streak. Until `min_obs` realised
+    outcomes exist for a ticker the multiplier is exactly 1.0 (no opinion).
+    """
+    ema_alpha: float = 0.35
+    strength: float = 0.5
+    floor: float = 0.5
+    cap: float = 1.15
+    min_obs: int = 2
+    enabled: bool = True
+
+    _ema: dict[str, float] = field(default_factory=dict)
+    _ema_abs: dict[str, float] = field(default_factory=dict)
+    _pulls: dict[str, int] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def observe(self, ticker: str, realised_pnl: float) -> None:
+        if not self.enabled:
+            return
+        pnl = float(realised_pnl)
+        a = float(self.ema_alpha)
+        with self._lock:
+            self._ema[ticker] = (1 - a) * self._ema.get(ticker, 0.0) + a * pnl
+            self._ema_abs[ticker] = (1 - a) * self._ema_abs.get(ticker, 0.0) + a * abs(pnl)
+            self._pulls[ticker] = self._pulls.get(ticker, 0) + 1
+            _log.info("ticker_bandit_observe", ticker=ticker,
+                      realised=round(pnl, 0), pulls=self._pulls[ticker],
+                      mult=round(self._multiplier_locked(ticker), 3),
+                      component="ticker_bandit")
+
+    def multiplier(self, ticker: str) -> float:
+        if not self.enabled:
+            return 1.0
+        with self._lock:
+            return self._multiplier_locked(ticker)
+
+    def _multiplier_locked(self, ticker: str) -> float:
+        if self._pulls.get(ticker, 0) < self.min_obs:
+            return 1.0
+        ema = self._ema.get(ticker, 0.0)
+        ema_abs = self._ema_abs.get(ticker, 0.0)
+        z = ema / (ema_abs + 1e-9)  # in [-1, 1]
+        return max(self.floor, min(self.cap, 1.0 + self.strength * z))
+
+    def stats(self) -> dict:
+        with self._lock:
+            return {
+                "enabled": self.enabled,
+                "tickers": {
+                    t: {"pulls": self._pulls.get(t, 0),
+                        "ema_pnl": round(self._ema.get(t, 0.0), 0),
+                        "multiplier": round(self._multiplier_locked(t), 3)}
+                    for t in sorted(self._pulls)
+                },
+            }
+
+
+def build_bandit_from_settings(strategy_settings) -> Optional[TickerBandit]:
+    """Construct a TickerBandit from `strategy_settings.ticker_bandit` config."""
+    cfg = getattr(strategy_settings, "ticker_bandit", None)
+    if cfg is None or not getattr(cfg, "enabled", False):
+        return None
+    return TickerBandit(
+        ema_alpha=float(getattr(cfg, "ema_alpha", 0.35) or 0.35),
+        strength=float(getattr(cfg, "strength", 0.5) or 0.5),
+        floor=float(getattr(cfg, "floor", 0.5) or 0.5),
+        cap=float(getattr(cfg, "cap", 1.15) or 1.15),
+        min_obs=int(getattr(cfg, "min_obs", 2) or 2),
+        enabled=True,
+    )
+
+
 def build_tuner_from_settings(strategy_settings) -> Optional[RLTuner]:
     """Construct an RLTuner from `strategy_settings.rl_tuner` config block.
 
