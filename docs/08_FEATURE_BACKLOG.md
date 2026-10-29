@@ -9,6 +9,26 @@ Priorities: **P0** = must work before hour 4 (fallback bot); **P1** = core compe
 > P3-20** (see §P3 below and WORK_LOG §6–§7). P2 items that shipped: P2-05 kill switch/SAFE_MODE
 > and P2-08 sector caps (0.30) are active; dashboard/HMM/standby remain aspirational.
 
+## P4 — Trade-quality programme (2026-10-30; 15-item list, see WORK_LOG 2026-10-30)
+
+| # | Item | Result | Status |
+|---|------|--------|--------|
+| 1 | M1 (rank) retrain / drop — weakest signal (IC 0.017) | Agent C: purged walk-forward retrain, gated >5% IC win | in flight |
+| 2 | Weekly weight re-optimization | `scripts/weekly_optimize.py` (pooled + by-regime + history) | done |
+| 3 | Momentum horizon blend 5d/10d/20d | `strategy.mom_horizon_weights` overlay | done |
+| 4 | Min holding period (kill scalp churn) | `min_hold_days: 3`, stop-loss exempt; 14 blocks in first 5 min live | done |
+| 5 | Regime-conditional weights | buckets too sparse (<30d) → pooled fallback; re-run as journals grow | done (deferred by data) |
+| 6 | Universe-relative entry timing | top-2 AND ≥ own 20d median; 6 blocks live | done |
+| 7 | News half-life decay (2d) | `NewsDecay`; sign bug found & fixed (max-abs signed) | done |
+| 8 | Volatility-scaled conviction | `signals.vol_scale_scores` | done |
+| 9 | Fresh-entry-only (score-change entries) | new-top-3 gate; 7 blocks live | done |
+| 10 | Stop-loss tuning from tradebook | `tune_stops.py`: ATR 2.0 = +₹45.7K vs 3.5 (caveat >30d band) — user decision pending | done (awaiting decision) |
+| 11 | Ensemble disagreement gate | rank-vs-mom sign gate @0.1 | done |
+| 12 | Retrain M1/M3 on sandbox data | Agent C, gated; `runs/_retrain_report.md` | in flight |
+| 13 | Mean-reversion for risk_off | `mean_reversion_in_risk_off` overlay | done |
+| 14 | Threshold walk-forward re-opt | `tune_thresholds.py`: no OOS improvement — keep ±0.75 / 0.05 / top_k 6 | done |
+| 15 | Quantum challenger | honest assessment: unlikely to help tiny tabular data; offline gated challenger only, deprioritized | deferred |
+
 ## P3 — Post-freeze hardening & tuning (2026-10-29, all DONE; see WORK_LOG §6–§7)
 
 | ID | Feature | Acceptance criteria | Status |

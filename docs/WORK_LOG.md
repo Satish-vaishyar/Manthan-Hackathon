@@ -303,3 +303,57 @@ offline FinBERT cache) and are now covered by `.gitignore`.
 | `3475173` | P3-18: statistically-estimated weights (IC + Markowitz + MC) |
 | `4354fd7` | P3-19/P3-20: startup holdings review + zero-rejection hardening |
 | `58c53c5` | fix `_load_optimized_weights` placement swallowing `__init__` |
+
+---
+
+## 2026-10-30 — Trade-quality improvement programme (15-item list) + docs/comments + reliability scoreboard
+
+### Governance: 3 agents, strict file ownership
+- **Agent A (strategy overlays)** — `bot/signals/overlays.py` (new, 241 lines), `bot/config.py`, `bot/main.py`, `bot/signals/ensemble.py`, `bot/models/ensemble.py`, `configs/default.yaml`, `tests/test_strategy_improvements.py`.
+- **Agent B (research tooling)** — `scripts/` only + `bot/portfolio/weight_optimizer.py` + new tests.
+- **Agent C (retraining, background)** — `model1/`, `model3/`, isolated `.venv-train/`, gated artifact swap (>5% CV IC win required).
+- **Docs agent + comments agent** (earlier) — 13 docs refreshed (`4dd7ce8`), 31 source files section-commented (`12ac34c`).
+
+### Shipped (commit `260ec9d`, 212 tests passing)
+Agent A — 8 opt-in overlays, all fail-soft, config-gated:
+1. Momentum horizon blend {5d:0.3, 10d:0.4, 20d:0.3}
+2. `min_hold_days: 3` — exits blocked for young lots (stop-loss exempt), `hold_period_blocked` events
+3. Universe-relative entry timing (top-2 AND >= own 20d median score), `entry_timing_blocked`
+4. News half-life decay (2d), `NewsDecay` per-ticker deque
+5. Volatility-scaled conviction scores (pre-ranking 1/vol)
+6. Rank-vs-mom disagreement gate, `signal_disagreement`
+7. Risk_off mean-reversion sub-score replaces momentum in risk_off
+8. Fresh-entry-only (must newly enter top-3), `fresh_entry_blocked`
+
+Agent B — research tooling:
+- `scripts/weekly_optimize.py` (pooled + by-regime + `runs/_weight_history.md`, idempotent)
+- `scripts/tune_stops.py` → **`stop_atr_mult 2.0` = +₹45.7K vs 3.5**, caveat: >30d band degrades; user decision pending
+- `scripts/tune_thresholds.py` → no OOS-supported threshold change (best OOS 0.80/0.08 still −5.9%); keep ±0.75 / 0.05 / top_k 6
+- `optimize_weights.py --by-regime` → regime buckets too sparse (<30d), pooled fallback; `configs/optimized_weights_by_regime.json` written
+
+### Bug found in review + fixed
+`NewsDecay.effective` used `max()` → negative sentiment biased toward 0 (a decayed −0.4 lost to a fresh −0.1). Now max-abs signed. Regression test `tests/test_news_decay_sign.py`.
+
+### Order reliability scoreboard (server tradebook = truth)
+| Era | Orders | Filled | Rejected | Success |
+|---|---|---|---|---|
+| Lifetime (400-order tradebook) | 400 | 392 | 8 | **98.0%** |
+| Post P3-21 (zero-rejection build) | all | all | **0** | **100%** |
+
+Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_p315` 8 → root-caused (INSUFFICIENT_MARGIN on phantom/short holdings) and closed by P3-20/P3-21 (server caches, clamps, cash reservation, retry ladder). Since P3-21: `live_p320/b`, `live_p321`, both overlay sessions = **0 rejections, 0 resyncs, 0 errors**.
+
+### Live validation of overlay build (2026-10-30, ~5 min in TRADING)
+- Boot clean: weights `{rank .257, news .337, mom .406}` (regenerated), Kafka connected, PREFLIGHT → TRADING, 15s reconcile
+- Gates firing as designed: `hold_period_blocked` 14, `fresh_entry_blocked` 7, `entry_timing_blocked` 6, `signal_disagreement` 0
+- 1 `buy_clamped_to_server_cash` (guard working), 0 rejections, 0 tracebacks
+- Equity ₹16.7L→₹17.2L across first reconciles, 5 longs, cash ₹7.62L
+
+### In flight
+- Agent C: M1 (LightGBM) + M3 (DMN) retrain, purged walk-forward CV (purge ≥5d), 3 seeds, gate = >5% IC win or no-deploy; report `runs/_retrain_report.md`.
+
+| Commit | Content |
+|--------|---------|
+| `d295307` | checkpoint before quantum experiments |
+| `12ac34c` | code documentation: section comments, 31 files |
+| `4dd7ce8` | docs: full refresh of all 13 docs |
+| `260ec9d` | 15-item list: 8 overlays + research tooling + NewsDecay fix (212 tests) |
