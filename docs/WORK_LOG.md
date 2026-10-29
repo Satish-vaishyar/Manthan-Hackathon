@@ -285,13 +285,21 @@ Tests: `python -m pytest tests/ -q` (154 passing as of P3-16).
 
 ## 10. Commit history
 
+**NOTE (2026-10-29):** the 10 local commits (`d3ec439`…`58c53c5`) were
+squashed into **`dbbacbf`** before pushing — the original `d3ec439` had
+accidentally committed ~700 MB of model weights (`model2/finbert_cache/`
+438 MB safetensors, 3×114 MB `.pt`, model3 seeds) which GitHub rejects
+(HTTP 408 / hangup). The artifacts remain on disk (the bot needs the
+offline FinBERT cache) and are now covered by `.gitignore`.
+
 | Commit | Content |
 |--------|---------|
+| `dbbacbf` | everything below, squashed & pushed |
 | `d3ec439`–`4f2709a` | server-contract fixes, model wiring, lifecycle |
 | `bc78092` | `run_bot.py` launcher (KAFKA/SIM prompt) |
 | `e0fd26b` | tuning pass 1 (weights, BLUX blacklist, wider stops) |
 | `74d9c19` | P3-14/P3-15: 6-point suite + RL tuner, 154 tests |
-| pending | P3-16: rejection-0 hardening (cash reservation) + this doc |
-
-**Push to origin still unverified** — `git push origin master` timed out
-once; re-attempt and confirm.
+| `5f7a9a2` | P3-16/P3-17: rejection-0 hardening + idle-cash deployer + WORK_LOG |
+| `3475173` | P3-18: statistically-estimated weights (IC + Markowitz + MC) |
+| `4354fd7` | P3-19/P3-20: startup holdings review + zero-rejection hardening |
+| `58c53c5` | fix `_load_optimized_weights` placement swallowing `__init__` |
