@@ -103,17 +103,24 @@ def build_target_weights(
     regime: str = "neutral",
     sector_caps: Optional[dict[str, float]] = None,
     sector_of: Optional[dict[str, str]] = None,
+    gross_long_target: Optional[dict[str, float]] = None,
 ) -> dict[str, float]:
-    """Top-K inverse-vol weights, capped, regime-scaled."""
+    """Top-K inverse-vol weights, capped, regime-scaled.
+
+    Args:
+        regime: 'risk_on' / 'neutral' / 'risk_off'. Used to look up gross long
+            target if `gross_long_target` is provided.
+        gross_long_target: dict[regime -> multiplier in [0, 1]]. If supplied,
+            the final weights are scaled by this multiplier so total gross
+            long exposure matches the regime target. If None, no scaling is
+            applied (caller is responsible for it).
+    """
     weights = inverse_vol_weights(
         scores,
         top_k=settings.top_k,
         max_weight=settings.max_weight_name,
         equity=equity,
     )
-    # Scale by regime's gross long target
-    gross = settings.weights  # not used here; use risk.gross_long_target
-    # (regime scaling is applied in caller via settings.risk.gross_long_target)
     # Sector caps: zero out any ticker whose sector exceeds cap
     if sector_caps and sector_of:
         sector_exp: dict[str, float] = {}
@@ -132,6 +139,11 @@ def build_target_weights(
         total = sum(weights.values())
         if total > 0:
             weights = {t: w / total for t, w in weights.items()}
+    # Apply gross long target (M5)
+    if gross_long_target is not None:
+        mult = gross_long_target.get(regime, 1.0)
+        if mult < 1.0:
+            weights = {t: w * mult for t, w in weights.items()}
     return weights
 
 

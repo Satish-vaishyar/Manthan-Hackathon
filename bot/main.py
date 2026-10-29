@@ -55,6 +55,7 @@ from .ingest.stage_watcher import StageWatcher
 from .journal.journal import DecisionJournal
 from .lifecycle import BotState, Lifecycle
 from .models.ensemble import Ensemble
+from .models.regime import RegimeDetector
 from .models.vol import VolEstimator
 from .portfolio.constructor import (
     PortfolioTarget,
@@ -110,6 +111,8 @@ class TradingBot:
         # M4: per-ticker realized-vol estimator for inverse-vol sizing.
         # window=20 trading days; falls back to 0.02 until each ticker has 5+ obs.
         self.vol = VolEstimator(window=20, fallback_vol=0.02)
+        # M5: market regime detector — gates gross long exposure.
+        self.regime = RegimeDetector()
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=20_000)
         self.kafka = KafkaIngest(settings, self.queue)
         self.assembler = DayAssembler(
@@ -339,6 +342,11 @@ class TradingBot:
         for ticker, tick in bundle.ticks.items():
             self.vol.update(ticker, tick.close)
 
+        # 2c) Update regime detector (M5)
+        regime_label = self.regime.update(bundle)
+        # Gross target is now applied inside build_target_weights via
+        # self.settings.risk.gross_long_target[regime_label]
+
         # 3) Build target weights + trade deltas
         scores_for_constructor: list[TickerScore] = []
         for e in evals:
@@ -354,9 +362,11 @@ class TradingBot:
         equity = self.ledger.equity or 1.0
         target_w = build_target_weights(
             scores_for_constructor, self.settings.strategy, equity,
+            regime=regime_label,
             sector_caps={"Tech": self.settings.risk.max_sector_weight,
                          "Finance": self.settings.risk.max_sector_weight},
             sector_of=self._sector_of,
+            gross_long_target=self.settings.risk.gross_long_target,
         )
         max_orders_remaining = await self.lifecycle.gate.orders_remaining(max_orders)
         deltas = build_trade_deltas(
@@ -384,7 +394,7 @@ class TradingBot:
                 "mom": ev.momentum_score if ev else 0.0,
                 "ensemble": ev.score if ev else 0.0,
             }
-            reasons = (ev.reasons if ev else []) + [d.reason]
+            reasons = (ev.reasons if ev else []) + [d.reason, f"regime={regime_label}"]
             if self.settings.dry_run:
                 _log.info("dry_run_trade", ticker=d.ticker, action=d.action,
                           qty=d.qty, price=d.price, target_w=d.target_weight,
@@ -407,8 +417,8 @@ class TradingBot:
                 "source": "core",
                 "scores": {"rank": ev.rank_score, "news": ev.news_score,
                             "mom": ev.momentum_score, "ensemble": ev.score},
-                "regime": None, "target_w": None, "current_w": None,
-                "reasons": ev.reasons, "shap_top3": [],
+                "regime": regime_label, "target_w": None, "current_w": None,
+                "reasons": ev.reasons + [f"regime={regime_label}"], "shap_top3": [],
                 "latency_ms": {"assemble": bundle.assembly_latency_ms},
                 "order_id": "", "status": "HOLD", "reject_code": None,
             })
