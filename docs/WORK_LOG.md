@@ -441,3 +441,10 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   losses (magnitude guard). 263 passing.
 - **Short threshold 0.63** (9b6a866, user spec): entry_threshold 0.85 -> 0.63
   so the bearish engine trades more often; exits/caps/budget unchanged.
+- **Short no-fire root cause + any_axis trigger** (454e5b7/46bc458): journal
+  analysis (1,015 obs) showed the equal-thirds bearish blend MAXES at 0.355
+  (rank axis [-0.14,+0.13], news [-0.27,+0.25]) — 0.63/0.75/0.85 blend
+  thresholds were mathematically unreachable. New trigger: any_axis = entry
+  when ANY negated axis >= 0.63 (momentum is the full-range carrier); blend
+  still ranks/sizes/exits (0.40 decay). Held shorts re-qualifying via entry
+  are kept. 268 passing.
