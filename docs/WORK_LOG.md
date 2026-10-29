@@ -431,3 +431,11 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
 - **Short engine ENABLED live** (2c72363, user decision): independent mode,
   entry 0.85 / exit 0.40 / adverse stop +10%, 3 names max, 10% per-name /
   20% gross caps, shared 8/day order budget. Restarted as runs/live_shorteng_*.
+- **P4-02 churn brake** (0b881cc, user: recent orders majority losses):
+  autopsy showed last-60 win 46.7% / -85K; held<=3d bucket -38K @30% win;
+  **45% of recent BUYs were re-buys within 3d of a SELL** (whipsaw).
+  Fixes: 3-day re-entry cooldown (0.90 score override) binding day-pipeline
+  BUY gate + deployer; deployer util target capped by gross_long_target
+  [regime] (it was buying to 95% in risk_off while the book targeted 40%).
+  MOTR -68K recent is the worst name; bandit will re-veto after 5 fresh
+  losses (magnitude guard). 263 passing.
