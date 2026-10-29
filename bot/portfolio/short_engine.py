@@ -40,11 +40,12 @@ _log = structlog.get_logger("portfolio.short_engine")
 @dataclass
 class ShortSignal:
     ticker: str
-    bearish_score: float       # S_short, higher = stronger decline evidence
+    bearish_score: float       # S_short blend, used for ranking/sizing/exits
     vol: float
     rank_score: float
     news_score: float
     momentum_score: float
+    is_entry: bool = False     # passed the entry trigger (blend or any_axis)
 
 
 class ShortAlphaEngine:
@@ -109,14 +110,27 @@ class ShortAlphaEngine:
                 vol = 0.0
             if vol <= 0:
                 continue
-            is_entry = bs >= entry_thr
+            if getattr(self.settings, "trigger", "blend") == "any_axis":
+                # Entry when ANY single axis shows >= entry_threshold bearish
+                # conviction (the blend caps near ~0.36 because rank/news
+                # live in [-0.25, +0.25] — a 0.63 blend bar never fires).
+                ax = []
+                if has_rank:
+                    ax.append(-e.rank_score)
+                if has_news:
+                    ax.append(-e.news_score)
+                if has_mom:
+                    ax.append(-e.momentum_score)
+                is_entry = bool(ax) and max(ax) >= entry_thr
+            else:
+                is_entry = bs >= entry_thr
             is_hold = int(held.get(e.ticker, 0)) > 0 and bs >= exit_thr
             if not (is_entry or is_hold):
                 continue
             scored.append(ShortSignal(
                 ticker=e.ticker, bearish_score=bs, vol=vol,
                 rank_score=e.rank_score, news_score=e.news_score,
-                momentum_score=e.momentum_score,
+                momentum_score=e.momentum_score, is_entry=is_entry,
             ))
         # Rank by bearish conviction; entries capped at max_names, held
         # shorts always kept (never strand a position without a target).
@@ -126,7 +140,7 @@ class ShortAlphaEngine:
         for s in scored:
             if int(held.get(s.ticker, 0)) > 0:
                 out[s.ticker] = s
-            elif n_entries < max_names and s.bearish_score >= entry_thr:
+            elif n_entries < max_names and s.is_entry:
                 out[s.ticker] = s
                 n_entries += 1
         if out:

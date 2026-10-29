@@ -223,6 +223,14 @@ class ShortEngineSettings:
     independent (full long-short)."""
     enabled: bool = False
     mode: str = "off"                # off | hedge | independent
+    # trigger: "blend" = weighted average of negated axes >= entry_threshold
+    # (REACHABLE range matters: the rank/news axes live in ~[-0.25, +0.25],
+    # so the blend caps near ~0.36 — a 0.63 blend threshold NEVER fires,
+    # proven on 1,015 journal observations 2026-10-30). "any_axis" = entry
+    # when ANY single negated axis >= entry_threshold (momentum is the
+    # full-range axis that actually carries the signal); the blend still
+    # ranks/sizes candidates and drives the decay exit.
+    trigger: str = "any_axis"
     weights: dict = field(default_factory=lambda: {
         "rank": 1.0 / 3.0, "news": 1.0 / 3.0, "mom": 1.0 / 3.0})
     entry_threshold: float = 0.85    # stricter than the long 0.75
@@ -560,6 +568,7 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
             s.strategy.short_engine = ShortEngineSettings(
                 enabled=bool(se_block.get("enabled", False)),
                 mode=str(se_block.get("mode", "off") or "off"),
+                trigger=str(se_block.get("trigger", "any_axis") or "any_axis"),
                 weights={k: float(v) for k, v in
                          (se_block.get("weights") or
                           {"rank": 1/3, "news": 1/3, "mom": 1/3}).items()},

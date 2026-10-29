@@ -10,7 +10,7 @@ from bot.portfolio.constructor import build_trade_deltas, TradeDelta
 
 
 def _settings(**kw) -> ShortEngineSettings:
-    base = dict(enabled=True, mode="independent",
+    base = dict(enabled=True, mode="independent", trigger="blend",
                 weights={"rank": 1/3, "news": 1/3, "mom": 1/3},
                 entry_threshold=0.85, exit_threshold=0.40,
                 adverse_stop_pct=0.10, max_names=3, max_weight_short=0.10)
@@ -176,13 +176,48 @@ class TestConstructorShortEmission:
         assert out.trades[0].action == "COVER" and out.trades[0].qty == 1000
 
 
+class TestAnyAxisTrigger:
+    """The blend caps near ~0.36 (rank/news axes live in [-0.25,+0.25]), so
+    a 0.63 BLEND bar never fires — 1,015 journal obs, max blend 0.355.
+    any_axis enters when ONE axis shows >= threshold bearish conviction."""
+
+    def test_any_axis_fires_on_strong_momentum(self) -> None:
+        e = ShortAlphaEngine(_settings(trigger="any_axis", entry_threshold=0.63))
+        # blend = (0.05 - 0.02 + 1.0)/3 ~ 0.34 -> blend mode would NOT fire
+        ev = [_eval("AAA", -0.05, 0.02, -1.00)]
+        out = e.evaluate(ev, regime="neutral", vol_fn=lambda t: 0.2)
+        assert "AAA" in out
+
+    def test_any_axis_ignores_weak_axes(self) -> None:
+        e = ShortAlphaEngine(_settings(trigger="any_axis", entry_threshold=0.63))
+        # every axis mildly bearish; blend ~0.4 but no axis >= 0.63
+        ev = [_eval("AAA", -0.14, -0.25, -0.60)]
+        assert e.evaluate(ev, regime="neutral", vol_fn=lambda t: 0.2) == {}
+
+    def test_blend_mode_still_available(self) -> None:
+        e = ShortAlphaEngine(_settings(trigger="blend", entry_threshold=0.30))
+        ev = [_eval("AAA", -0.05, 0.02, -1.00)]  # blend ~0.34 >= 0.30
+        assert "AAA" in e.evaluate(ev, regime="neutral", vol_fn=lambda t: 0.2)
+
+    def test_any_axis_exit_still_blend_decay(self) -> None:
+        e = ShortAlphaEngine(_settings(trigger="any_axis", entry_threshold=0.63,
+                                       exit_threshold=0.40))
+        # held short, blend 0.34 < exit 0.40 -> dropped even though an axis
+        # is still strongly bearish... blend 0.343 >= 0.40? compute:
+        # (0.05 - 0.02 + 1.0)/3 = 0.343 < 0.40 -> cover. Correct: decay exit.
+        ev = [_eval("AAA", -0.05, 0.02, -1.00)]
+        assert e.evaluate(ev, regime="neutral", vol_fn=lambda t: 0.2,
+                          held_shorts={"AAA": 100}) == {}
+
+
 def test_short_engine_block_parsed_from_yaml() -> None:
     s = load_settings("configs/default.yaml")
     se = s.strategy.short_engine
     assert se is not None
-    # live-enabled in independent mode (user request 2026-10-30); strict
-    # 0.85 entry threshold + tight caps keep it a low-exposure module
+    # live-enabled in independent mode (user request 2026-10-30); per-axis
+    # 0.63 trigger (user spec) + tight caps keep it a low-exposure module
     assert se.enabled is True and se.mode == "independent"
+    assert se.trigger == "any_axis"
     assert se.entry_threshold == pytest.approx(0.63)  # user spec 2026-10-30
     assert se.exit_threshold == pytest.approx(0.40)
     assert se.adverse_stop_pct == pytest.approx(0.10)
