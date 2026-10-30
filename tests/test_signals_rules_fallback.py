@@ -42,6 +42,27 @@ def test_rules_fallback_returns_one_eval_per_ticker():
         assert "news" in ev.sub_scores
 
 
+def test_trend_score_blend_falls_before_cross():
+    """50/50 cross + close-vs-SMA50 blend: a price drop below SMA50 must push
+    the trend score negative BEFORE the SMA20<SMA50 cross (counterfactual
+    2026-10-30: +78K on 126 lagged-exit trips)."""
+    from collections import deque
+    from bot.models.rules import RulesStrategy
+    from bot.signals.rules_fallback import RulesFallback as RF
+
+    # Gentle uptrend (100 -> 110 over 51 bars) so SMA20 keeps positive margin
+    # over SMA50, then 4 sharp down-bars to 100: close ~5% below SMA50 while
+    # the pure cross is still POSITIVE. The blend must already be negative.
+    ramp = [100.0 + 0.2 * i for i in range(51)]
+    buf = deque(ramp + [100.0] * 4, maxlen=200)
+    for cls in (RulesStrategy, RF):
+        s = cls()._trend_score(buf)
+        sma20 = sum(list(buf)[-20:]) / 20
+        sma50 = sum(list(buf)[-50:]) / 50
+        assert sma20 > sma50, "fixture must keep the pure cross positive"
+        assert s < 0.0, f"{cls.__name__} blend must turn negative pre-cross"
+
+
 def test_rules_fallback_score_zero_with_no_history():
     rb = RulesFallback()
     evals = rb.evaluate_day(_bundle({"AAA": _tick("AAA", 100.0)}, []))

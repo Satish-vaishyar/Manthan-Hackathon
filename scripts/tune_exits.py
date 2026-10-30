@@ -123,6 +123,31 @@ def sim_stepped(closes, i0, i1, entry_px,
     return None
 
 
+def sim_underwater_ts(closes, i0, i1, entry_px, days, band=0.0):
+    """Underwater time-stop: on day `days` after entry, if the close is below
+    entry*(1-band), exit at that close. Caps PATIENCE on dead money — winners
+    at day N are already positive and untouched (unlike flat stops, which cap
+    recovery). Tradebook 2026-10-30: >10%-loss bucket holds 34d avg, twice
+    the time winners need to reach +10% (24d)."""
+    d = i0 + int(days)
+    if d > i1:
+        return None
+    c = closes[d]
+    if np.isfinite(c) and c < entry_px * (1 - band):
+        return c, d
+    return None
+
+
+def sim_first(closes, i0, i1, entry_px, *fns):
+    """Combine exit simulators: return the exit that fires EARLIEST."""
+    best = None
+    for fn in fns:
+        hit = fn()
+        if hit is not None and (best is None or hit[1] < best[1]):
+            best = hit
+    return best
+
+
 # ----------------------------------------------------------------------
 # Tournament
 # ----------------------------------------------------------------------
@@ -186,6 +211,27 @@ def main() -> int:
         "trail5":   lambda c, a, i0, i1, e: sim_trail(c, i0, i1, e, 0.05),
         "trail10":  lambda c, a, i0, i1, e: sim_trail(c, i0, i1, e, 0.10),
         "stepped":  lambda c, a, i0, i1, e: sim_stepped(c, i0, i1, e),
+        # Underwater time-stops (tradebook evidence 2026-10-30): big losers
+        # hold 34d avg — twice what winners need. Exit dead money at day N.
+        "uw15":     lambda c, a, i0, i1, e: sim_underwater_ts(c, i0, i1, e, 15),
+        "uw20":     lambda c, a, i0, i1, e: sim_underwater_ts(c, i0, i1, e, 20),
+        "uw25":     lambda c, a, i0, i1, e: sim_underwater_ts(c, i0, i1, e, 25),
+        "uw30":     lambda c, a, i0, i1, e: sim_underwater_ts(c, i0, i1, e, 30),
+        # 3% tolerance band: only exit if losing by MORE than 3% at day N
+        # (ignores flat/noise positions, keeps marginal drifters).
+        "uw25b3":   lambda c, a, i0, i1, e: sim_underwater_ts(c, i0, i1, e, 25, 0.03),
+        "uw30b3":   lambda c, a, i0, i1, e: sim_underwater_ts(c, i0, i1, e, 30, 0.03),
+        # Underwater stop + disaster floor combo: time-stop at 25d AND hard
+        # -15% floor at any time — exit at WHICHEVER fires first (the floor
+        # catches the crash-before-day-25 case the time-stop misses).
+        "uw25_sl15": lambda c, a, i0, i1, e: sim_first(
+            c, i0, i1, e,
+            lambda: sim_underwater_ts(c, i0, i1, e, 25),
+            lambda: sim_flat_stop(c, i0, i1, e, 0.15)),
+        "uw30_sl15": lambda c, a, i0, i1, e: sim_first(
+            c, i0, i1, e,
+            lambda: sim_underwater_ts(c, i0, i1, e, 30),
+            lambda: sim_flat_stop(c, i0, i1, e, 0.15)),
     }
 
     def stats(pnls, n_trig, sim_days):

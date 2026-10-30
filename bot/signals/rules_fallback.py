@@ -123,12 +123,17 @@ class RulesFallback:
         return sum(list(buf)[-n:]) / n
 
     def _trend_score(self, buf: deque) -> float:
+        # Mirror of bot/models/rules.py: 50% SMA20-vs-SMA50 cross + 50%
+        # close-vs-SMA50. Counterfactual (2026-10-30): the blend fires the
+        # trend-down stamp ~2-4 weeks before the pure cross -> +78K on 126
+        # affected trips.
         sma20 = self._sma(buf, 20)
         sma50 = self._sma(buf, 50)
         if sma20 is None or sma50 is None or sma50 <= 0:
             return 0.0
-        diff = (sma20 - sma50) / sma50
-        return max(-1.0, min(1.0, diff * 20.0))  # 5% spread -> +1
+        close = buf[-1]
+        blended = 0.5 * (sma20 - sma50) / sma50 + 0.5 * (close - sma50) / sma50
+        return max(-1.0, min(1.0, blended * 20.0))  # 5% blended gap -> ±1
 
     @staticmethod
     def _rsi14(buf: deque, n: int = 14) -> float:

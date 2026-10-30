@@ -115,13 +115,22 @@ class RulesStrategy:
         return sum(list(buf)[-n:]) / n
 
     def _trend_score(self, buf: deque) -> float:
-        """SMA20-vs-SMA50 relative spread, scaled so a 5% gap saturates to ±1."""
+        """Trend = 50% SMA20-vs-SMA50 cross spread + 50% close-vs-SMA50 spread.
+
+        The pure cross lags badly: tradebook counterfactual (2026-10-30, 126
+        trips exited with a trend-down stamp) showed exiting on the blended
+        signal (which turns negative as soon as price trades below SMA50)
+        nets -57K vs -136K recorded (+78K). Both legs scale a 5% gap to ±1.
+        """
         sma20 = self._sma(buf, 20)
         sma50 = self._sma(buf, 50)
         if sma20 is None or sma50 is None or sma50 <= 0:
             return 0.0
-        diff = (sma20 - sma50) / sma50
-        return max(-1.0, min(1.0, diff * 20.0))  # 5% spread -> +1
+        close = buf[-1]
+        cross = (sma20 - sma50) / sma50
+        px50 = (close - sma50) / sma50
+        blended = 0.5 * cross + 0.5 * px50
+        return max(-1.0, min(1.0, blended * 20.0))  # 5% blended gap -> ±1
 
     @staticmethod
     def _rsi14(buf: deque, n: int = 14) -> float:
