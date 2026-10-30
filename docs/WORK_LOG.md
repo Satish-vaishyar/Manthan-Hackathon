@@ -470,3 +470,14 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   avg loss -3,218) -> P4-03 short profit rungs (COVER 25% at -8/-14/-25%
   favorable) implemented (1f03e62/f43df6e). Recent 80 trips: +17.7K,
   win 57.5% — churn brake working. 270 passing.
+- **Tradebook formula/weight autopsy** (user: extract what made profits vs
+  losses): joined 693 trips with entry-day journal scores. Long axes vs
+  realized trip returns: rank IC +0.064, news IC +0.081, mom IC -0.012
+  (mom non-linear: best bucket 0.3-0.6 -> 2.63%/55% win). Re-ran
+  optimize_weights.py on ALL journals (34,581 records / 500 sim days,
+  next-day IC): CONFIRMS rank 0.257/news 0.337/mom 0.406 (mom IC +0.135
+  best next-day predictor; trip-return IC is exit-contaminated) - weights
+  unchanged, now on 50x more data. SHORT side: bearish-momentum-ONLY
+  shorts IC -0.213 - crashed names BOUNCE. New two_axis trigger: >=2 axes
+  range-normalised (rank/0.15, news/0.27, mom/1.0) must clear the bar;
+  threshold 0.63 -> 0.75 (user spec). 446718e/d0804ee, 274 passing.
