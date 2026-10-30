@@ -498,3 +498,17 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   only winning overlay). Tightened bandit BUY-veto instead: arms at 3
   decayed trades (was 5) with avg <= -8K/trade (was -5K) - AERX would have
   been blocked after its 3rd -15K-class loss instead of never. 277 passing.
+- **Tail-capture / weight-tuning study** (user: model misses higher highs /
+  lower lows - tune weights): 4,950 obs, per-axis IC + tail capture.
+  Findings: (1) the day before +15% weeks: mom +0.78, ens +0.32 - the model
+  IS positioned for higher highs; ens top-quintile lift x1.36 = BEST of all
+  signals tested. (2) Breakout/range-position axes (20d/50d highs) have
+  NEGATIVE IC (-0.006..-0.05): this market fades breakouts; adding them
+  degrades the ensemble monotonically. (3) -15% weeks start from the SAME
+  fingerprint (mom +0.69, ens +0.28 bullish) - crashes are momentum
+  REVERSALS indistinguishable from continuations at entry (103 up vs 35 dn
+  = 3:1 continuation odds); defence must be exit-side (shipped: trend
+  blend, giveback guard, bandit veto). (4) Weight alternatives tested
+  (IC-derived 0/0.48/0.52, five mom/news tilts): all WORSE on IC or tail
+  capture than current 0.257/0.337/0.406 - kept. No code change; data over
+  intuition.
