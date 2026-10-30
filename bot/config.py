@@ -197,6 +197,9 @@ class StrategySettings:
     # P4-04: giveback guard â€” armed stop for the post-rung remainder.
     # Defaults to ON with tournament-winning params (arm 8% / stop -2%).
     giveback_guard: "GivebackGuardSettings" = None  # type: ignore[assignment]
+    # P4-06: underwater resize guard - defer lossy score-decay sells while
+    # the raw blend is still bullish. Defaults ON (counterfactual +17.5L).
+    resize_guard: "ResizeGuardSettings" = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -317,6 +320,28 @@ class GivebackGuardSettings:
     enabled: bool = True
     arm_pct: float = 0.08
     stop_pct: float = -0.02
+
+
+@dataclass
+class ResizeGuardSettings:
+    """Underwater resize guard (P4-06).
+
+    Defers constructor SELLs (score-decay / vol-deflation resizes) that
+    would realise a loss worse than `min_loss_pct` while the ensemble's
+    RAW blend for the ticker is still positive — i.e. the sell is driven
+    by vol-scaling / rank shuffling, NOT by genuine signal decay. Genuine
+    decay (raw <= 0), trend-down exits, trailing/giveback stops and profit
+    rungs are never blocked. A deferred sell is re-allowed after
+    `max_defer_days` sim days (cap on underwater time).
+
+    Evidence (2,086-trip counterfactual, 2026-10-30): vol_scaled exits are
+    76% of all exits and -17.5L net lifetime; the 1,209 lossy ones held
+    until recovery to entry-2% (max 40d) end +17.5L BETTER — 87% recover.
+    The bot was selling vol-spike dips and re-buying the recovery.
+    """
+    enabled: bool = True
+    min_loss_pct: float = 0.02  # only defer when underwater by > 2%
+    max_defer_days: int = 40    # then the score-decay exit is allowed anyway
 
 
 @dataclass
@@ -660,6 +685,13 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
                 enabled=bool(gg_block.get("enabled", True)),
                 arm_pct=float(gg_block.get("arm_pct", 0.08) or 0.08),
                 stop_pct=float(gg_block.get("stop_pct", -0.02)),
+            )
+        rg_block = strat.pop("resize_guard", None)
+        if rg_block is not None:
+            s.strategy.resize_guard = ResizeGuardSettings(
+                enabled=bool(rg_block.get("enabled", True)),
+                min_loss_pct=float(rg_block.get("min_loss_pct", 0.02) or 0.02),
+                max_defer_days=int(rg_block.get("max_defer_days", 40) or 40),
             )
         if "mom_horizon_weights" in (merged.get("strategy") or {}):
             mhw = merged["strategy"].get("mom_horizon_weights")

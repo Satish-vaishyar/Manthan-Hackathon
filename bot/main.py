@@ -258,6 +258,9 @@ class TradingBot:
         self._sptp_stage: dict[str, int] = {}
         # P4-04: tickers whose giveback-guard stop is armed (saw +arm_pct).
         self._gg_armed: set = set()
+        # P4-06: first sim date each ticker's lossy resize sell was deferred
+        # (underwater resize guard; reset when the lot predates the entry).
+        self._resize_defer: dict = {}
 
     @staticmethod
     def _load_optimized_weights(settings) -> Optional[dict[str, float]]:
@@ -1581,8 +1584,44 @@ class TradingBot:
         dg_cfg = getattr(self.settings.strategy, "disagreement_gate", None)
         dg_enabled = bool(dg_cfg and getattr(dg_cfg, "enabled", False))
         dg_thr = float(getattr(dg_cfg, "threshold", 0.1) or 0.1) if dg_cfg else 0.1
+        # P4-06: underwater resize guard — defer lossy constructor SELLs
+        # while the raw blend is still bullish (vol-deflation dip, not
+        # signal decay). Counterfactual on 1,209 lossy vol_scaled exits:
+        # +17.5L held to recovery (87% recover within 40 trading days).
+        rg_cfg = getattr(self.settings.strategy, "resize_guard", None)
+        rg_enabled = bool(rg_cfg and getattr(rg_cfg, "enabled", False)) \
+            and not self.settings.dry_run
+        rg_min_loss = float(getattr(rg_cfg, "min_loss_pct", 0.02) or 0.02) if rg_cfg else 0.02
+        rg_max_days = int(getattr(rg_cfg, "max_defer_days", 40) or 40) if rg_cfg else 40
         for d in deltas.trades:
             qty = d.qty
+            if rg_enabled and d.action == "SELL":
+                lots_rg = self.ledger.lots.get(d.ticker)
+                if lots_rg and d.ticker in bundle.ticks:
+                    entry_rg = float(lots_rg[0].price)
+                    px_rg = float(bundle.ticks[d.ticker].close)
+                    ev_rg = next((e for e in evals if e.ticker == d.ticker), None)
+                    raw_rg = float(ev_rg.raw_score) if ev_rg is not None else 0.0
+                    if entry_rg > 0 and px_rg < entry_rg * (1.0 - rg_min_loss) \
+                            and raw_rg > 0:
+                        first_d = self._resize_defer.get(d.ticker)
+                        # stale entry from a previous position -> reset
+                        if first_d is None or first_d < lots_rg[0].buy_date:
+                            first_d = bundle.simulated_date
+                            self._resize_defer[d.ticker] = first_d
+                        defer_days = (bundle.simulated_date - first_d).days
+                        if defer_days < rg_max_days:
+                            _log.info("resize_guard_defer", ticker=d.ticker,
+                                      qty=qty, entry=round(entry_rg, 2),
+                                      px=round(px_rg, 2),
+                                      loss_pct=round((px_rg - entry_rg) / entry_rg * 100, 1),
+                                      raw=round(raw_rg, 4), defer_day=defer_days,
+                                      component="main")
+                            continue
+                        # defer expired -> allow the score-decay exit
+                    else:
+                        # recovered / not underwater / raw flipped -> clear
+                        self._resize_defer.pop(d.ticker, None)
             # Minimum holding period: skip SELL/COVER for lots younger than
             # `min_hold_days` sim days UNLESS the exit is a stop-loss or the
             # settlement guard (those must always be allowed through).

@@ -171,6 +171,19 @@ strategy:
     enabled: true
     arm_pct: 0.08
     stop_pct: -0.02
+  # P4-06: underwater resize guard — defers constructor SELLs (score-decay /
+  # vol-deflation resizes) that would realise a loss worse than min_loss_pct
+  # while the ensemble's RAW blend is still bullish: the sell is then driven
+  # by vol-scaling / rank shuffling, not genuine signal decay, and the
+  # counterfactual (2,086 vol_scaled exits, 2026-10-30) shows the 1,209
+  # lossy ones end +17.5L BETTER held to recovery (87% recover within 40d).
+  # Genuine decay (raw <= 0), trend-down, stops and rungs are NEVER blocked;
+  # after max_defer_days the score-decay exit is allowed anyway. This was
+  # the "huge losses" mechanism: sell the vol-spike dip, re-buy the bounce.
+  resize_guard:
+    enabled: true
+    min_loss_pct: 0.02
+    max_defer_days: 40
   # P3-24: stepped trailing SL — DISABLED 2026-10-30 after the exit-strategy
   # tournament (scripts/tune_exits.py, 744 round trips): EVERY mechanical
   # exit overlay lost money vs the native score-decay exit; stepped was the

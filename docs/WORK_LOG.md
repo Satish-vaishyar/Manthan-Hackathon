@@ -518,3 +518,16 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   protection moves from gross exposure cuts to the selective stack: bandit
   veto, churn brake, trend blend, giveback guard. The 0.40 risk_off floor
   was the main driver of the ~25% average utilisation on the server.
+- **P4-06 underwater resize guard** (user: takes huge losses, not profits
+  correctly): capture autopsy showed profit-taking is NOT the problem
+  (rung slices 99% capture, +14.4L, 100% win; winners overall capture
+  76-82% of peak). The losses are vol-spike resize sells: vol_scaled exits
+  are 76% of ALL exits (2,086 trips), net -17.5L lifetime; the 1,209 lossy
+  ones bounce +0.6% within 5d of the sell. Counterfactual: held until
+  recovery to entry-2% (max 40d) they end +17.5L BETTER - 87% recover.
+  Fix: constructor SELLs underwater >2% are DEFERRED while the ensemble
+  raw blend stays bullish (raw > 0); genuine decay (raw <= 0), trend
+  exits, stops and rungs never blocked; defer expires after 40 sim days.
+  Config strategy.resize_guard {enabled, min_loss_pct 0.02, max_defer_days
+  40}; state self._resize_defer with stale-entry reset on new lots.
+  279 passing.

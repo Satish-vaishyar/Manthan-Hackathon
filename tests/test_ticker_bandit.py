@@ -216,6 +216,35 @@ def test_giveback_guard_semantics() -> None:
     assert not fired
 
 
+def test_resize_guard_block_parsed() -> None:
+    s = load_settings("configs/default.yaml")
+    rg = s.strategy.resize_guard
+    # P4-06: enabled — counterfactual on 1,209 lossy vol_scaled exits:
+    # +17.5L held to recovery; 87% recover within 40 trading days.
+    assert rg is not None and rg.enabled is True
+    assert rg.min_loss_pct == pytest.approx(0.02)
+    assert rg.max_defer_days == 40
+
+
+def test_resize_guard_semantics() -> None:
+    """Defers only when (a) underwater > min_loss_pct AND (b) raw blend
+    still bullish AND (c) defer < max_defer_days. Genuine signal decay
+    (raw <= 0), shallow losses and expired defers all exit freely."""
+    entry = 100.0
+    min_loss, max_days = 0.02, 40
+
+    def defers(px, raw, defer_days):
+        underwater = px < entry * (1.0 - min_loss)
+        return underwater and raw > 0 and defer_days < max_days
+
+    assert defers(97.9, 0.3, 0)        # -2.1%, still bullish -> hold
+    assert defers(90.0, 0.1, 39)       # deep loss, faintly bullish -> hold
+    assert not defers(97.9, -0.05, 0)  # raw flipped negative -> exit
+    assert not defers(99.0, 0.5, 0)    # only -1% (< band) -> resize freely
+    assert not defers(90.0, 0.3, 40)   # defer expired -> exit
+    assert not defers(101.0, 0.3, 5)   # green again -> resize freely
+
+
 def test_trailing_sl_block_parsed() -> None:
     s = load_settings("configs/default.yaml")
     tsl = s.strategy.trailing_sl
