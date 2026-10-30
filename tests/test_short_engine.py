@@ -254,6 +254,7 @@ def test_short_engine_block_parsed_from_yaml() -> None:
         (pytest.approx(0.14), pytest.approx(0.25)),
         (pytest.approx(0.25), pytest.approx(0.25)),
     ]
+    assert sum(se.weights.values()) == pytest.approx(1.0, abs=0.01)
 
 
 def test_short_profit_rung_math() -> None:
@@ -266,4 +267,3 @@ def test_short_profit_rung_math() -> None:
         qty -= q
     assert covered == 250 + 187 + 140
     assert qty == 423
-    assert sum(se.weights.values()) == pytest.approx(1.0, abs=0.01)
