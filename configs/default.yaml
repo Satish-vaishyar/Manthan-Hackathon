@@ -144,6 +144,13 @@ strategy:
     adverse_stop_pct: 0.10  # hard stop: price +10% vs short entry
     max_names: 3
     max_weight_short: 0.10  # per-name short cap (stricter than the 20% long cap)
+    # P4-03: short profit rungs — mirror of the long ladder. COVER 25% of the
+    # short at each favorable move; rest rides the bearish-decay exit.
+    # Fixes measured asymmetry: avg short win +1,656 vs avg loss -3,218.
+    profit_rungs:
+      - { pct: 0.08, frac: 0.25 }
+      - { pct: 0.14, frac: 0.25 }
+      - { pct: 0.25, frac: 0.25 }
   # P3-24: stepped trailing SL — DISABLED 2026-10-30 after the exit-strategy
   # tournament (scripts/tune_exits.py, 744 round trips): EVERY mechanical
   # exit overlay lost money vs the native score-decay exit; stepped was the

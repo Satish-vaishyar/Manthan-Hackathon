@@ -172,6 +172,11 @@ def main() -> int:
         "p25@8":    ("partial", 0.25, 0.08),
         "sl5":      lambda c, a, i0, i1, e: sim_flat_stop(c, i0, i1, e, 0.05),
         "sl10":     lambda c, a, i0, i1, e: sim_flat_stop(c, i0, i1, e, 0.10),
+        # Disaster stops (user request 2026-10-30): only cap the -19K-class
+        # tail outliers, leave normal score-decay exits untouched.
+        "sl12":     lambda c, a, i0, i1, e: sim_flat_stop(c, i0, i1, e, 0.12),
+        "sl15":     lambda c, a, i0, i1, e: sim_flat_stop(c, i0, i1, e, 0.15),
+        "sl20":     lambda c, a, i0, i1, e: sim_flat_stop(c, i0, i1, e, 0.20),
         "atr2.0":   lambda c, a, i0, i1, e: sim_atr_stop(c, a, i0, i1, e, 2.0),
         "atr3.5":   lambda c, a, i0, i1, e: sim_atr_stop(c, a, i0, i1, e, 3.5),
         "tp10":     lambda c, a, i0, i1, e: sim_flat_tp(c, i0, i1, e, 0.10),

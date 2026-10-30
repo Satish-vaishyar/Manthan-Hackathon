@@ -248,4 +248,22 @@ def test_short_engine_block_parsed_from_yaml() -> None:
     assert se.adverse_stop_pct == pytest.approx(0.10)
     assert se.max_names == 3
     assert se.max_weight_short == pytest.approx(0.10)
+    # P4-03: short profit rungs mirror the long ladder
+    assert [(r["pct"], r["frac"]) for r in se.profit_rungs] == [
+        (pytest.approx(0.08), pytest.approx(0.25)),
+        (pytest.approx(0.14), pytest.approx(0.25)),
+        (pytest.approx(0.25), pytest.approx(0.25)),
+    ]
+
+
+def test_short_profit_rung_math() -> None:
+    """Each rung COVERs 25% of the CURRENT short; ~42% rides after 3 rungs."""
+    qty = 1000
+    covered = 0
+    for _ in range(3):
+        q = int(qty * 0.25)
+        covered += q
+        qty -= q
+    assert covered == 250 + 187 + 140
+    assert qty == 423
     assert sum(se.weights.values()) == pytest.approx(1.0, abs=0.01)

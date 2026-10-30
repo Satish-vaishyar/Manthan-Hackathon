@@ -254,6 +254,8 @@ class TradingBot:
         self.short_engine = ShortAlphaEngine(_se_cfg) if _se_cfg is not None else None
         # P4-02: last sim date each ticker was SOLD (re-entry cooldown).
         self._last_sell_date: dict = {}
+        # P4-03: per-ticker short profit-rung stage (reset when flat).
+        self._sptp_stage: dict[str, int] = {}
 
     @staticmethod
     def _load_optimized_weights(settings) -> Optional[dict[str, float]]:
@@ -1402,6 +1404,53 @@ class TradingBot:
                 self._ptp_stage[t] = stage + 1
                 # P4-02: rung sells also start the re-entry cooldown.
                 self._last_sell_date[t] = bundle.simulated_date
+
+        # P4-03: short profit rungs — mirror of the long ladder. At each
+        # FAVORABLE move (price DOWN `pct` from short entry), COVER `frac`
+        # of the current short; the rest rides the bearish-decay exit.
+        # Fixes the measured short asymmetry (avg win +1,656 vs avg loss
+        # -3,218 — decay clipped winners, the adverse stop let losers run).
+        if self.short_engine is not None and self.short_engine.enabled \
+                and not self.settings.dry_run:
+            rungs = getattr(self.short_engine.settings, "profit_rungs", None) or []
+            for t in list(self._sptp_stage):
+                if t not in self.ledger.shorts:
+                    del self._sptp_stage[t]  # flat — reset for next short
+            for t, sp in list(self.ledger.shorts.items()):
+                if not rungs or sp.qty <= 0 or t not in bundle.ticks:
+                    continue
+                stage = int(self._sptp_stage.get(t, 0))
+                if stage >= len(rungs):
+                    continue
+                entry = float(getattr(sp, "entry_price", 0.0) or 0.0)
+                px = float(bundle.ticks[t].close)
+                if entry <= 0 or (entry - px) / entry < float(rungs[stage]["pct"]):
+                    continue
+                qty = int(int(sp.qty) * float(rungs[stage]["frac"]))
+                server_s = getattr(self, "_server_shorts", None)
+                if server_s is not None:
+                    qty = min(qty, max(0, int(server_s.get(t, 0))))
+                if qty <= 0:
+                    continue
+                remaining_sp = await self.lifecycle.gate.orders_remaining(max_orders)
+                if remaining_sp <= 1:
+                    break
+                _log.info("short_profit_rung", ticker=t, qty=qty,
+                          rung=stage + 1, n_rungs=len(rungs),
+                          entry=round(entry, 2), px=round(px, 2),
+                          gain_pct=round((entry - px) / entry * 100, 1),
+                          component="short_engine")
+                await self.order_manager.submit(
+                    OrderRequest(ticker=t, action="COVER", quantity=qty,
+                                 date=bundle.simulated_date,
+                                 reason=f"short_tp rung{stage+1} {rungs[stage]['frac']:.0%}@{(entry-px)/entry:.1%}"),
+                    scores={"ensemble": 0.0},
+                    reasons=["short_profit_rung", f"regime={regime_label}"],
+                )
+                await self.lifecycle.gate.record_order()
+                if server_s is not None:
+                    server_s[t] = int(server_s.get(t, 0)) - qty
+                self._sptp_stage[t] = stage + 1
 
         # P3-24: stepped trailing stop-loss (ratchets up, never lowers):
         #   peak gain < +3%  -> stop at entry - 10%

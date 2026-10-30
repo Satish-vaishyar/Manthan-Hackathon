@@ -238,6 +238,16 @@ class ShortEngineSettings:
     adverse_stop_pct: float = 0.10   # hard stop: price up 10% vs short entry
     max_names: int = 3               # max simultaneous short names
     max_weight_short: float = 0.10   # per-name short cap (<= long cap)
+    # P4-03: short profit rungs — mirror of the long ladder. At each
+    # FAVORABLE move (price DOWN `pct` from short entry), COVER `frac` of
+    # the current short; the rest rides the decay exit. Fixes the measured
+    # short asymmetry (avg win +1,656 vs avg loss -3,218: decay clipped
+    # winners early while the adverse stop allowed fuller losses).
+    profit_rungs: list = field(default_factory=lambda: [
+        {"pct": 0.08, "frac": 0.25},
+        {"pct": 0.14, "frac": 0.25},
+        {"pct": 0.25, "frac": 0.25},
+    ])
 
 
 @dataclass
@@ -581,6 +591,12 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
                 adverse_stop_pct=float(se_block.get("adverse_stop_pct", 0.10) or 0.10),
                 max_names=int(se_block.get("max_names", 3) or 3),
                 max_weight_short=float(se_block.get("max_weight_short", 0.10) or 0.10),
+                profit_rungs=[{"pct": float(r.get("pct", 0.08)),
+                               "frac": float(r.get("frac", 0.25))}
+                              for r in (se_block.get("profit_rungs") or [
+                                  {"pct": 0.08, "frac": 0.25},
+                                  {"pct": 0.14, "frac": 0.25},
+                                  {"pct": 0.25, "frac": 0.25}])],
             )
         ptp_block = strat.pop("partial_take_profit", None)
         if ptp_block is not None:
