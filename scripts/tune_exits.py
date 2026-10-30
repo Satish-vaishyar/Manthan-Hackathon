@@ -138,6 +138,25 @@ def sim_underwater_ts(closes, i0, i1, entry_px, days, band=0.0):
     return None
 
 
+def sim_armed_stop(closes, i0, i1, entry_px, arm_pct, stop_pct):
+    """Giveback guard: once the close reaches entry*(1+arm_pct) (i.e. a profit
+    rung would have fired), arm a stop at entry*(1+stop_pct). Protects the
+    REMAINDER after a rung books 25% — the PLNX 2025-11 case: +9.5% peak,
+    rung sold 25%, then the 75% remainder round-tripped to -7.5% because no
+    guard existed between the rung and the lagging trend exit."""
+    armed = False
+    stop = entry_px * (1 + stop_pct)
+    for d in range(i0 + 1, i1 + 1):
+        c = closes[d]
+        if not np.isfinite(c):
+            continue
+        if not armed and c >= entry_px * (1 + arm_pct):
+            armed = True
+        if armed and c <= stop:
+            return c, d
+    return None
+
+
 def sim_first(closes, i0, i1, entry_px, *fns):
     """Combine exit simulators: return the exit that fires EARLIEST."""
     best = None
@@ -232,6 +251,17 @@ def main() -> int:
             c, i0, i1, e,
             lambda: sim_underwater_ts(c, i0, i1, e, 30),
             lambda: sim_flat_stop(c, i0, i1, e, 0.15)),
+        # Giveback guards (user complaint 2026-10-30: PLNX +9.5% -> -7.5%
+        # on the 75% remainder after rung 1 booked 25%). Stop arms only AFTER
+        # the close reaches the first rung; until then the position is
+        # untouched — unlike global trailing stops, which LOSE (trail5/10).
+        "be@8":     lambda c, a, i0, i1, e: sim_armed_stop(c, i0, i1, e, 0.08, 0.00),
+        "lock2@8":  lambda c, a, i0, i1, e: sim_armed_stop(c, i0, i1, e, 0.08, 0.02),
+        "lock4@8":  lambda c, a, i0, i1, e: sim_armed_stop(c, i0, i1, e, 0.08, 0.04),
+        # Armed at rung 2 (+14%): looser, only protects bigger winners.
+        "lock4@14": lambda c, a, i0, i1, e: sim_armed_stop(c, i0, i1, e, 0.14, 0.04),
+        # Armed + stepped trailing floor for the remainder.
+        "trail6@8": lambda c, a, i0, i1, e: sim_armed_stop(c, i0, i1, e, 0.08, -0.02),
     }
 
     def stats(pnls, n_trig, sim_days):

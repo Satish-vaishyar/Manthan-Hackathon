@@ -194,6 +194,9 @@ class StrategySettings:
     # P3-24: trailing stop-loss — initial stop at entry*(1-initial_pct);
     # as price rises the stop trails the peak by trail_pct (never lowers).
     trailing_sl: "TrailingSLSettings" = None  # type: ignore[assignment]
+    # P4-04: giveback guard — armed stop for the post-rung remainder.
+    # Defaults to ON with tournament-winning params (arm 8% / stop -2%).
+    giveback_guard: "GivebackGuardSettings" = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -293,6 +296,27 @@ class TrailingSLSettings:
     lock_start_pct: float = 0.05
     first_lock_pct: float = 0.03
     step_pct: float = 0.02
+
+
+@dataclass
+class GivebackGuardSettings:
+    """Giveback guard for the ladder REMAINDER (P4-04).
+
+    Once a long's close reaches entry*(1+arm_pct) — i.e. rung 1 territory —
+    a stop arms at entry*(1+stop_pct). If the position round-trips back to
+    that level, the whole remainder is SOLD. Only the post-rung remainder is
+    affected; pre-rung positions are untouched (unlike global trailing stops,
+    which the tournament proved LOSE: trail5 -137K, trail10 -214K).
+
+    Evidence (744-trip exit tournament, 2026-10-30): the armed stop is the
+    FIRST overlay ever to beat recorded exits — arm 8% / stop -2%:
+    +71.2K vs recorded on only 10 triggers. Motivating case: PLNX 2025-11,
+    +9.5% peak, rung booked 25%, then the 75% remainder rode the lagging
+    trend exit all the way to -7.5% (-44.6K).
+    """
+    enabled: bool = True
+    arm_pct: float = 0.08
+    stop_pct: float = -0.02
 
 
 @dataclass
@@ -628,6 +652,13 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
                 lock_start_pct=float(ts_block.get("lock_start_pct", 0.05) or 0.05),
                 first_lock_pct=float(ts_block.get("first_lock_pct", 0.03) or 0.03),
                 step_pct=float(ts_block.get("step_pct", 0.02) or 0.02),
+            )
+        gg_block = strat.pop("giveback_guard", None)
+        if gg_block is not None:
+            s.strategy.giveback_guard = GivebackGuardSettings(
+                enabled=bool(gg_block.get("enabled", True)),
+                arm_pct=float(gg_block.get("arm_pct", 0.08) or 0.08),
+                stop_pct=float(gg_block.get("stop_pct", -0.02)),
             )
         if "mom_horizon_weights" in (merged.get("strategy") or {}):
             mhw = merged["strategy"].get("mom_horizon_weights")

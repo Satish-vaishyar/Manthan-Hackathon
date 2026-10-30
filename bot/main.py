@@ -256,6 +256,8 @@ class TradingBot:
         self._last_sell_date: dict = {}
         # P4-03: per-ticker short profit-rung stage (reset when flat).
         self._sptp_stage: dict[str, int] = {}
+        # P4-04: tickers whose giveback-guard stop is armed (saw +arm_pct).
+        self._gg_armed: set = set()
 
     @staticmethod
     def _load_optimized_weights(settings) -> Optional[dict[str, float]]:
@@ -1517,6 +1519,60 @@ class TradingBot:
                     server_h[t] = int(server_h.get(t, 0)) - qty
                 tp_exits.add(t)  # same no-same-day-reentry treatment
                 self._last_sell_date[t] = bundle.simulated_date  # P4-02
+
+        # P4-04: giveback guard — armed stop for the ladder REMAINDER. Once
+        # the close reaches entry*(1+arm_pct) (rung-1 territory), a stop arms
+        # at entry*(1+stop_pct); if the position round-trips back to it, the
+        # whole remainder is SOLD. First overlay ever to beat recorded exits
+        # in the 744-trip tournament: +71.2K on only 10 triggers (arm 8% /
+        # stop -2%). Global trailing stops LOSE (-137K/-214K) because they
+        # strangle pre-rung positions — this one is inert until +8%.
+        gg_cfg = getattr(self.settings.strategy, "giveback_guard", None)
+        if gg_cfg is not None and bool(getattr(gg_cfg, "enabled", False)) \
+                and not self.settings.dry_run:
+            gg_arm = float(getattr(gg_cfg, "arm_pct", 0.08) or 0.08)
+            gg_stop_pct = float(getattr(gg_cfg, "stop_pct", -0.02))
+            for t in list(self._gg_armed):
+                if not self.ledger.lots.get(t):
+                    self._gg_armed.discard(t)  # flat — disarm
+            for t, lots in list(self.ledger.lots.items()):
+                if not lots or t not in bundle.ticks or t in tp_exits:
+                    continue
+                entry = float(lots[0].price)
+                px = float(bundle.ticks[t].close)
+                if entry <= 0 or px <= 0:
+                    continue
+                if px >= entry * (1.0 + gg_arm):
+                    self._gg_armed.add(t)
+                if t not in self._gg_armed or px > entry * (1.0 + gg_stop_pct):
+                    continue
+                qty = sum(int(l.qty) for l in lots)
+                server_h = getattr(self, "_server_holdings", None)
+                if server_h is not None:
+                    qty = min(qty, max(0, int(server_h.get(t, 0))))
+                if qty <= 0:
+                    continue
+                remaining_gg = await self.lifecycle.gate.orders_remaining(max_orders)
+                if remaining_gg <= 1:
+                    break
+                _log.info("giveback_guard_exit", ticker=t, qty=qty,
+                          entry=round(entry, 2), px=round(px, 2),
+                          arm_pct=gg_arm, stop_pct=gg_stop_pct,
+                          pnl_pct=round((px - entry) / entry * 100, 1),
+                          component="main")
+                await self.order_manager.submit(
+                    OrderRequest(ticker=t, action="SELL", quantity=qty,
+                                 date=bundle.simulated_date,
+                                 reason=f"giveback_guard armed@{gg_arm:.0%} stop@{gg_stop_pct:.0%}"),
+                    scores={"ensemble": 0.0},
+                    reasons=["giveback_guard", f"regime={regime_label}"],
+                )
+                await self.lifecycle.gate.record_order()
+                if server_h is not None:
+                    server_h[t] = int(server_h.get(t, 0)) - qty
+                tp_exits.add(t)
+                self._last_sell_date[t] = bundle.simulated_date  # P4-02
+                self._gg_armed.discard(t)
 
         # 5) Execute trades
         min_hold = int(getattr(self.settings.strategy, "min_hold_days", 0) or 0)

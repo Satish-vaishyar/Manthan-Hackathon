@@ -481,3 +481,11 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   shorts IC -0.213 - crashed names BOUNCE. New two_axis trigger: >=2 axes
   range-normalised (rank/0.15, news/0.27, mom/1.0) must clear the bar;
   threshold 0.63 -> 0.75 (user spec). 446718e/d0804ee, 274 passing.
+- **Giveback guard P4-04** (user: PLNX +9.5% -> -7.5% round-trip): rung 1
+  HAD fired (booked 25% at +9.5%) but the 75% remainder rode the lagging
+  trend exit to -7.5% (-44.6K). Tournament-tested armed stops: arm at +8%
+  close, stop at entry-2% -> FIRST overlay ever to beat recorded exits
+  (+71.2K, only 10 triggers; lock4@8 also wins +66.7K/31). Global trailing
+  stops still lose (inert pre-rung is the key). Implemented live. Plus the
+  trend-lag blend fix (7bd12f2) attacks the same trade from the other side.
+  277 passing.

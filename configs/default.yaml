@@ -152,6 +152,17 @@ strategy:
       - { pct: 0.08, frac: 0.25 }
       - { pct: 0.14, frac: 0.25 }
       - { pct: 0.25, frac: 0.25 }
+  # P4-04: giveback guard — armed stop for the ladder REMAINDER. Arms only
+  # once the close reaches +arm_pct from entry (rung-1 territory); sells the
+  # whole remainder if it round-trips back to stop_pct. First overlay ever to
+  # beat recorded exits in the 744-trip tournament (+71.2K, arm 8%/stop -2%,
+  # only 10 triggers — inert pre-rung, unlike global trailing stops, which
+  # LOSE). Fixes the PLNX 2025-11 case: +9.5% peak -> -7.5% on the 75%
+  # remainder after rung 1 had booked 25%.
+  giveback_guard:
+    enabled: true
+    arm_pct: 0.08
+    stop_pct: -0.02
   # P3-24: stepped trailing SL — DISABLED 2026-10-30 after the exit-strategy
   # tournament (scripts/tune_exits.py, 744 round trips): EVERY mechanical
   # exit overlay lost money vs the native score-decay exit; stepped was the

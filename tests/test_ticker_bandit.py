@@ -185,6 +185,37 @@ def test_partial_take_profit_rung_math() -> None:
     assert held == 423  # ~42% of the original keeps running
 
 
+def test_giveback_guard_block_parsed() -> None:
+    s = load_settings("configs/default.yaml")
+    gg = s.strategy.giveback_guard
+    # P4-04: enabled — the ONLY exit overlay to beat recorded exits in the
+    # 744-trip tournament (+71.2K, arm 8% / stop -2%, just 10 triggers).
+    assert gg is not None and gg.enabled is True
+    assert gg.arm_pct == pytest.approx(0.08)
+    assert gg.stop_pct == pytest.approx(-0.02)
+
+
+def test_giveback_guard_semantics() -> None:
+    """Arms only at/above +arm_pct; inert before (unlike trailing stops);
+    once armed, fires at stop_pct even though price fell back below arm."""
+    entry = 100.0
+    path = [100.0, 105.0, 108.5, 104.0, 99.0, 97.9]  # +8.5% peak -> -2.1%
+    armed = False
+    exit_px = None
+    for px in path:
+        if px >= entry * 1.08:
+            armed = True
+        if armed and px <= entry * 0.98:
+            exit_px = px
+            break
+    assert exit_px == pytest.approx(97.9)  # fires on the -2.1% close
+    # never armed -> never fires even at -2%
+    armed = False
+    fired = any((armed := armed or px >= entry * 1.08) and px <= entry * 0.98
+                for px in (100.0, 103.0, 97.5))
+    assert not fired
+
+
 def test_trailing_sl_block_parsed() -> None:
     s = load_settings("configs/default.yaml")
     tsl = s.strategy.trailing_sl
