@@ -462,3 +462,11 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   **First short in bot history FILLED: ORCX 1,326 @ Rs 131.54 (~1.74L).**
   short_delta_trace instrumentation kept (4eee420) for ongoing visibility.
   269 passing.
+- **Loss autopsy -> actions** (user: why huge losses): lifetime 666 trips
+  net +12.9K; churn (<=3d holds) -4.4L is the dominant bleeder (P4-02 fix
+  already live); long tail losses (AERX -19K/39d) -> disaster-stop
+  tournament (sl12/15/20) ALL LOSE vs native exits (-2.4L/-99K/-71K) ->
+  NOT implemented, data over intuition; short asymmetry (avg win +1,656 vs
+  avg loss -3,218) -> P4-03 short profit rungs (COVER 25% at -8/-14/-25%
+  favorable) implemented (1f03e62/f43df6e). Recent 80 trips: +17.7K,
+  win 57.5% — churn brake working. 270 passing.
