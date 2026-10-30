@@ -190,8 +190,9 @@ class TestAnyAxisTrigger:
 
     def test_any_axis_ignores_weak_axes(self) -> None:
         e = ShortAlphaEngine(_settings(trigger="any_axis", entry_threshold=0.63))
-        # every axis mildly bearish; blend ~0.4 but no axis >= 0.63
-        ev = [_eval("AAA", -0.14, -0.25, -0.60)]
+        # every axis mildly bearish in NORMALISED terms (rank -0.05/0.15=0.33,
+        # news -0.10/0.27=0.37, mom -0.50/1.0=0.50 — all < 0.63); blend ~0.22
+        ev = [_eval("AAA", -0.05, -0.10, -0.50)]
         assert e.evaluate(ev, regime="neutral", vol_fn=lambda t: 0.2) == {}
 
     def test_blend_mode_still_available(self) -> None:
