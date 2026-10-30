@@ -71,7 +71,10 @@ strategy:
   # freed capital compounding instead of sitting idle between day-bundles.
   idle_cash_deploy:
     enabled: true
-    epsilon: 0.05
+    # P4-05: tightened 0.05 -> 0.02 so the deployer closes right to the
+    # utilisation target instead of stopping 5% short (with risk_off at
+    # 0.85, 5% slack meant 80% actual — now 83%+ floor everywhere).
+    epsilon: 0.02
   # P3-22: per-ticker RL bandit — every realised SELL/COVER updates an EMA of
   # that ticker's P&L; score multiplier = clamp(1 + strength*z, floor, cap).
   # Chronic losers get penalised toward 0.5 (capital rotates to other names),
@@ -242,7 +245,12 @@ risk:
   # P3-14: cap a single BUY at this fraction of available cash to avoid
   # INSUFFICIENT_CAPITAL rejections (was 99% of cash on one trade).
   max_cash_per_trade: 0.90
-  gross_long_target: { risk_on: 0.92, neutral: 0.75, risk_off: 0.40 }
+  # P4-05: user mandate 2026-10-30 — keep allocation ABOVE 80% in EVERY
+  # regime. risk_off de-risking is now provided by the bandit veto, the
+  # churn brake and the exit stack (trend blend + giveback guard) instead
+  # of gross exposure cuts (the 0.40 floor was the main reason utilization
+  # averaged ~25-60%).
+  gross_long_target: { risk_on: 0.95, neutral: 0.90, risk_off: 0.85 }
 
 tax:
   ltcg_wait_days: 30

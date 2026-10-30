@@ -1,4 +1,4 @@
-"""Tests for P3-16 (rejection-0 hardening) and P3-17 (idle-cash deployer)."""
+﻿"""Tests for P3-16 (rejection-0 hardening) and P3-17 (idle-cash deployer)."""
 from __future__ import annotations
 
 import pytest
@@ -96,4 +96,5 @@ def test_idle_cash_deploy_yaml_roundtrip(monkeypatch) -> None:
     s = _settings(monkeypatch)
     assert s.strategy.idle_cash_deploy is not None
     assert s.strategy.idle_cash_deploy.enabled is True
-    assert s.strategy.idle_cash_deploy.epsilon == pytest.approx(0.05)
+    assert s.strategy.idle_cash_deploy.epsilon == pytest.approx(0.02)  # P4-05: close to target
+

@@ -387,7 +387,8 @@ class RiskSettings:
     max_short_single: float = 0.10
     max_name_weight: float = 0.15
     max_sector_weight: float = 0.30
-    gross_long_target: dict[str, float] = field(default_factory=lambda: {"risk_on": 0.92, "neutral": 0.75, "risk_off": 0.40})
+    # P4-05: user mandate 2026-10-30 — >=80% allocation in EVERY regime.
+    gross_long_target: dict[str, float] = field(default_factory=lambda: {"risk_on": 0.95, "neutral": 0.90, "risk_off": 0.85})
     # P3-14: pause opening new positions after N consecutive losing days;
     # resets on the first green day. Set to 0 to disable.
     max_consecutive_loss_pause: int = 0

@@ -512,3 +512,9 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   (IC-derived 0/0.48/0.52, five mom/news tilts): all WORSE on IC or tail
   capture than current 0.257/0.337/0.406 - kept. No code change; data over
   intuition.
+- **P4-05 >=80% allocation mandate** (user): gross_long_target raised from
+  risk_on/neutral/risk_off 0.92/0.75/0.40 to 0.95/0.90/0.85 and deployer
+  epsilon tightened 0.05 -> 0.02 (floor now ~83% in every regime). Risk-off
+  protection moves from gross exposure cuts to the selective stack: bandit
+  veto, churn brake, trend blend, giveback guard. The 0.40 risk_off floor
+  was the main driver of the ~25% average utilisation on the server.
