@@ -138,6 +138,20 @@ def sim_underwater_ts(closes, i0, i1, entry_px, days, band=0.0):
     return None
 
 
+def sim_failfast(closes, i0, i1, entry_px, window_days, pct):
+    """Failed-entry stop: only active during the FIRST `window_days` after
+    entry — if any close in that window is <= entry*(1-pct), exit at that
+    close. Thesis (current-session autopsy 2026-10-30): good entries don't
+    immediately go -4/-7%; the big quick losses (HAVN -24K/4d, AERX -20K/4d)
+    were wrong from day one. Unlike a flat stop, mature positions keep their
+    room to breathe — flat stops fail precisely because they strangle them."""
+    for d in range(i0 + 1, min(i0 + int(window_days), i1) + 1):
+        c = closes[d]
+        if np.isfinite(c) and c <= entry_px * (1 - pct):
+            return c, d
+    return None
+
+
 def sim_armed_stop(closes, i0, i1, entry_px, arm_pct, stop_pct):
     """Giveback guard: once the close reaches entry*(1+arm_pct) (i.e. a profit
     rung would have fired), arm a stop at entry*(1+stop_pct). Protects the
@@ -262,6 +276,20 @@ def main() -> int:
         "lock4@14": lambda c, a, i0, i1, e: sim_armed_stop(c, i0, i1, e, 0.14, 0.04),
         # Armed + stepped trailing floor for the remainder.
         "trail6@8": lambda c, a, i0, i1, e: sim_armed_stop(c, i0, i1, e, 0.08, -0.02),
+        # Failed-entry stops (current-session autopsy 2026-10-30): entries
+        # that drop -4..-7% within the first days are wrong, not unlucky.
+        # Window-limited so mature positions keep breathing room (the reason
+        # flat stops always lose this tournament).
+        "ff3/-4":   lambda c, a, i0, i1, e: sim_failfast(c, i0, i1, e, 3, 0.04),
+        "ff5/-4":   lambda c, a, i0, i1, e: sim_failfast(c, i0, i1, e, 5, 0.04),
+        "ff5/-5":   lambda c, a, i0, i1, e: sim_failfast(c, i0, i1, e, 5, 0.05),
+        "ff7/-5":   lambda c, a, i0, i1, e: sim_failfast(c, i0, i1, e, 7, 0.05),
+        "ff7/-6":   lambda c, a, i0, i1, e: sim_failfast(c, i0, i1, e, 7, 0.06),
+        # Fail-fast + giveback guard combo (the two winners together).
+        "ff5/-4+gg": lambda c, a, i0, i1, e: sim_first(
+            c, i0, i1, e,
+            lambda: sim_failfast(c, i0, i1, e, 5, 0.04),
+            lambda: sim_armed_stop(c, i0, i1, e, 0.08, -0.02)),
     }
 
     def stats(pnls, n_trig, sim_days):

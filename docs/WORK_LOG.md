@@ -489,3 +489,12 @@ Historical rejected attempts by session: `live_fixed` 7, `live_tuned` 13, `live_
   stops still lose (inert pre-rung is the key). Implemented live. Plus the
   trend-lag blend fix (7bd12f2) attacks the same trade from the other side.
   277 passing.
+- **Loss-cap round 2** (user: still huge losses): split orderbook by true
+  execution order (4,452 fills, 9 timeline sessions). Lifetime +8.7L
+  (+87%); CURRENT session -29.9K @ 41.5% win; worst are 2-4d quick losses
+  (HAVN -24K/4d, AERX x4 in worst-6). Tested fail-fast stops (exit if -4..6%
+  within first 3-7d): ALL LOSE BIG (-2.4L to -3.8L vs recorded - early dips
+  recover) -> rejected. Exit side is exhausted (giveback guard remains the
+  only winning overlay). Tightened bandit BUY-veto instead: arms at 3
+  decayed trades (was 5) with avg <= -8K/trade (was -5K) - AERX would have
+  been blocked after its 3rd -15K-class loss instead of never. 277 passing.

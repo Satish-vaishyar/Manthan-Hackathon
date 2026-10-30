@@ -211,12 +211,12 @@ class TickerBandit:
     # new BUYs in the ticker are blocked entirely. Self-healing: the EMAs
     # decay by `day_decay` per sim day without a fill, so a ticker that goes
     # quiet re-earns eligibility (unlike a static blacklist).
-    veto_pulls: int = 5
+    veto_pulls: int = 3  # tightened 5->3 (2026-10-30): stop heavy losers 1-2 trades earlier
     veto_z: float = -0.55
     # Magnitude guard: veto requires ema <= -veto_avg_rupees too, so
     # low-win-rate / BIG-winner names (the bot's profit profile) are not
     # vetoed for losing often while winning big.
-    veto_avg_rupees: float = 5000.0
+    veto_avg_rupees: float = 8000.0
     day_decay: float = 0.90
 
     _ema: dict[str, float] = field(default_factory=dict)
@@ -318,9 +318,9 @@ def build_bandit_from_settings(strategy_settings) -> Optional[TickerBandit]:
         floor=float(getattr(cfg, "floor", 0.5) or 0.5),
         cap=float(getattr(cfg, "cap", 1.15) or 1.15),
         min_obs=int(getattr(cfg, "min_obs", 2) or 2),
-        veto_pulls=int(getattr(cfg, "veto_pulls", 5) or 5),
+        veto_pulls=int(getattr(cfg, "veto_pulls", 3) or 3),
         veto_z=float(getattr(cfg, "veto_z", -0.55) or -0.55),
-        veto_avg_rupees=float(getattr(cfg, "veto_avg_rupees", 5000.0) or 5000.0),
+        veto_avg_rupees=float(getattr(cfg, "veto_avg_rupees", 8000.0) or 8000.0),
         day_decay=float(getattr(cfg, "day_decay", 0.90) or 0.90),
         enabled=True,
     )

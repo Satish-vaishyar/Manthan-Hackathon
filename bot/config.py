@@ -1,7 +1,7 @@
-"""bot.config — typed Settings object loaded from configs/*.yaml + env vars.
+﻿"""bot.config â€” typed Settings object loaded from configs/*.yaml + env vars.
 
-Per docs/10 §3: no magic numbers; every threshold lives in configs/*.yaml.
-Per docs/10 §4: configs are merged (default <- env-specific), then env vars
+Per docs/10 Â§3: no magic numbers; every threshold lives in configs/*.yaml.
+Per docs/10 Â§4: configs are merged (default <- env-specific), then env vars
 override.
 """
 from __future__ import annotations
@@ -26,7 +26,7 @@ def _read_yaml(p: Path) -> dict[str, Any]:
 
 
 def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    """Recursive dict merge — override wins."""
+    """Recursive dict merge â€” override wins."""
     out = dict(base)
     for k, v in (override or {}).items():
         if k in out and isinstance(out[k], dict) and isinstance(v, dict):
@@ -39,7 +39,7 @@ def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
 def _expand_env(v: Any) -> Any:
     """Expand ${VAR} placeholders in string leaves using os.environ."""
     if isinstance(v, str) and "${" in v:
-        # Replace ${VAR} tokens; missing → empty string (logged at boot).
+        # Replace ${VAR} tokens; missing â†’ empty string (logged at boot).
         def _sub(m: str) -> str:
             var = m.group(1)
             val = os.environ.get(var, "")
@@ -58,7 +58,7 @@ def _expand_env(v: Any) -> Any:
 @dataclass
 class KafkaSettings:
     """Kafka ingest knobs. `consumers` is the number of consumer tasks in
-    one group (broker assigns partitions); auto-commit stays off — the
+    one group (broker assigns partitions); auto-commit stays off â€” the
     simulated feed is replayed per run, so offsets aren't ours to commit."""
     port: int = 9094
     consumers: int = 4
@@ -91,7 +91,7 @@ class TimingSettings:
     hard_deadline_ms: int = 800
     heartbeat_interval_s: float = 10.0  # re-ACK watchdog cadence
     stage_poll_preflight_s: float = 2.5
-    # P3-14: faster stage polling — when the org flips simulation on/off we
+    # P3-14: faster stage polling â€” when the org flips simulation on/off we
     # detect it in <=10s instead of <=30s, so less downtime.
     stage_poll_simulation_s: float = 10.0
     # P3-14: reconcile interval. Was implicitly 30s in _health_loop; make
@@ -120,7 +120,7 @@ class StrategySettings:
     min_trade_notional: float = 75_000.0
     # P3-19: exits use a LOWER notional floor than entries. A legacy
     # position from a previous run that's worth Rs 20K should still be
-    # sellable when the model no longer wants it — Rs 20 brokerage on a
+    # sellable when the model no longer wants it â€” Rs 20 brokerage on a
     # Rs 20K exit is fine; letting a loser rot is not. Entries stay at
     # min_trade_notional (75K) for fee efficiency.
     exit_min_notional: float = 5_000.0
@@ -128,7 +128,7 @@ class StrategySettings:
     event_long_threshold: float = 0.6
     event_short_threshold: float = -0.6
     # P3-13: tickers to exclude from scoring entirely (per-ticker blacklist
-    # from tradebook analysis — see runs/_tradebook_analysis.md §6.6).
+    # from tradebook analysis â€” see runs/_tradebook_analysis.md Â§6.6).
     exclude_tickers: list[str] = field(default_factory=list)
     # P3-14: minimum PnL/charge ratio that justifies an order. Trades
     # expected to make less than this multiple of the brokerage cost are
@@ -146,10 +146,10 @@ class StrategySettings:
     idle_cash_deploy: "IdleCashDeploySettings" = None  # type: ignore[assignment]
     # P3-18: "static" (use `weights` from YAML) or "optimized" (load
     # configs/optimized_weights.json produced by scripts/optimize_weights.py
-    # — Monte-Carlo + Markowitz-on-IC estimates from the trade journals).
+    # â€” Monte-Carlo + Markowitz-on-IC estimates from the trade journals).
     weights_mode: str = "static"
     optimized_weights_path: str = "configs/optimized_weights.json"
-    # --- Strategy improvements (2026-10-29) — all opt-in / fail-soft ---
+    # --- Strategy improvements (2026-10-29) â€” all opt-in / fail-soft ---
     # Multi-horizon momentum blend {d5, d10, d20}. None = disabled (mom
     # sub-score unchanged).
     mom_horizon_weights: Optional[dict[str, float]] = None
@@ -166,35 +166,35 @@ class StrategySettings:
     mean_reversion_in_risk_off: bool = False
     # Only BUY tickers that newly entered the top-3 today.
     fresh_entry_only: bool = False
-    # P4-02: re-entry cooldown — after SELLing a ticker, block BUY re-entry
+    # P4-02: re-entry cooldown â€” after SELLing a ticker, block BUY re-entry
     # for this many sim days unless its fresh score >= reentry_score_override.
     # Data 2026-10-30 (server orderbook): trades held <=2 sim days LOST
     # -3.0L over 169 trades (deployer/day-pipeline whipsaw); >2d holds
     # earned +4.7L. Attack the churn at ENTRY; exits stay untouched.
     reentry_cooldown_days: int = 3
     reentry_score_override: float = 0.90
-    # P3-22: per-ticker RL bandit — penalise chronic losers (score multiplier
+    # P3-22: per-ticker RL bandit â€” penalise chronic losers (score multiplier
     # toward `floor`), mildly reward consistent winners (capped at `cap`).
     ticker_bandit: "TickerBanditSettings" = None  # type: ignore[assignment]
-    # P3-23: take-profit — SELL a long whose unrealised gain from FIFO entry
+    # P3-23: take-profit â€” SELL a long whose unrealised gain from FIFO entry
     # reaches this fraction (0 disables). 0.10 = lock in +10% winners.
     take_profit_pct: float = 0.0
-    # P3-25: partial take-profit — book `fraction` of a long once when gain
+    # P3-25: partial take-profit â€” book `fraction` of a long once when gain
     # >= pct from FIFO entry; the rest rides the native score-decay exit.
     # Tournament: full TP cost -2.3L; 25%@8% costs only -30K (cheapest
     # profit-booking insurance that keeps the winners' tail).
     partial_take_profit: "PartialTakeProfitSettings" = None  # type: ignore[assignment]
-    # P4-01: Short Alpha Engine — separate bearish pipeline; off by default
+    # P4-01: Short Alpha Engine â€” separate bearish pipeline; off by default
     # until diagnostics validate the negative tail (scripts/short_alpha_analysis.py).
     short_engine: "ShortEngineSettings" = None  # type: ignore[assignment]
-    # P4-02: deployer regime cap — when True, the idle-cash deployer's
+    # P4-02: deployer regime cap â€” when True, the idle-cash deployer's
     # utilization target is capped by risk.gross_long_target[regime] so it
     # stops fighting the regime scaler in risk_off (churn source #2).
     deployer_regime_cap: bool = True
-    # P3-24: trailing stop-loss — initial stop at entry*(1-initial_pct);
+    # P3-24: trailing stop-loss â€” initial stop at entry*(1-initial_pct);
     # as price rises the stop trails the peak by trail_pct (never lowers).
     trailing_sl: "TrailingSLSettings" = None  # type: ignore[assignment]
-    # P4-04: giveback guard — armed stop for the post-rung remainder.
+    # P4-04: giveback guard â€” armed stop for the post-rung remainder.
     # Defaults to ON with tournament-winning params (arm 8% / stop -2%).
     giveback_guard: "GivebackGuardSettings" = None  # type: ignore[assignment]
 
@@ -221,17 +221,17 @@ class DisagreementGateSettings:
 
 @dataclass
 class ShortEngineSettings:
-    """P4-01: Short Alpha Engine — separate bearish pipeline (NOT a reversal
+    """P4-01: Short Alpha Engine â€” separate bearish pipeline (NOT a reversal
     of the long strategy). mode: off (control) | hedge (risk_off only) |
     independent (full long-short)."""
     enabled: bool = False
     mode: str = "off"                # off | hedge | independent
     # trigger: "blend" = weighted average of negated axes >= entry_threshold
     # (REACHABLE range matters: the rank/news axes live in ~[-0.25, +0.25],
-    # so the blend caps near ~0.36 — a 0.63 blend threshold NEVER fires,
+    # so the blend caps near ~0.36 â€” a 0.63 blend threshold NEVER fires,
     # proven on 1,015 journal observations 2026-10-30). "any_axis" = entry
     # when ANY single negated axis >= entry_threshold; "two_axis" = at
-    # least TWO axes must clear the bar — required because tradebook
+    # least TWO axes must clear the bar â€” required because tradebook
     # analysis (2026-10-30, 50 realized shorts) showed bearish-MOMENTUM-only
     # shorts have IC -0.213 vs realized short returns: crashed names
     # BOUNCE. Multi-axis agreement filters those mean-reversion traps.
@@ -249,7 +249,7 @@ class ShortEngineSettings:
     adverse_stop_pct: float = 0.10   # hard stop: price up 10% vs short entry
     max_names: int = 3               # max simultaneous short names
     max_weight_short: float = 0.10   # per-name short cap (<= long cap)
-    # P4-03: short profit rungs — mirror of the long ladder. At each
+    # P4-03: short profit rungs â€” mirror of the long ladder. At each
     # FAVORABLE move (price DOWN `pct` from short entry), COVER `frac` of
     # the current short; the rest rides the decay exit. Fixes the measured
     # short asymmetry (avg win +1,656 vs avg loss -3,218: decay clipped
@@ -302,14 +302,14 @@ class TrailingSLSettings:
 class GivebackGuardSettings:
     """Giveback guard for the ladder REMAINDER (P4-04).
 
-    Once a long's close reaches entry*(1+arm_pct) — i.e. rung 1 territory —
+    Once a long's close reaches entry*(1+arm_pct) â€” i.e. rung 1 territory â€”
     a stop arms at entry*(1+stop_pct). If the position round-trips back to
     that level, the whole remainder is SOLD. Only the post-rung remainder is
     affected; pre-rung positions are untouched (unlike global trailing stops,
     which the tournament proved LOSE: trail5 -137K, trail10 -214K).
 
     Evidence (744-trip exit tournament, 2026-10-30): the armed stop is the
-    FIRST overlay ever to beat recorded exits — arm 8% / stop -2%:
+    FIRST overlay ever to beat recorded exits â€” arm 8% / stop -2%:
     +71.2K vs recorded on only 10 triggers. Motivating case: PLNX 2025-11,
     +9.5% peak, rung booked 25%, then the 75% remainder rode the lagging
     trend exit all the way to -7.5% (-44.6K).
@@ -325,18 +325,18 @@ class TickerBanditSettings:
 
     multiplier = clamp(1 + strength * EMA(pnl)/EMA(|pnl|), floor, cap).
     Bounded both ways: losers get rotated away from, winners get at most a
-    `cap` boost — no gambling on streaks."""
+    `cap` boost â€” no gambling on streaks."""
     enabled: bool = False
     ema_alpha: float = 0.35
     strength: float = 0.5
     floor: float = 0.5
     cap: float = 1.15
     min_obs: int = 2
-    veto_pulls: int = 5    # hard-BUY-veto after this many realised trades
+    veto_pulls: int = 3    # hard-BUY-veto after this many realised trades (tightened 5->3, 2026-10-30)
     veto_z: float = -0.55  # ...when edge z <= this (strongly negative)
     # ...AND avg realised P&L per trade <= -this (magnitude guard: spares
     # low-win-rate / big-winner names whose EMA z is negative but small).
-    veto_avg_rupees: float = 5000.0
+    veto_avg_rupees: float = 8000.0
     day_decay: float = 0.90  # EMA decay per quiet sim day (self-healing)
 
 
@@ -381,7 +381,7 @@ class RiskSettings:
     # small float for rounding errors.
     cash_buffer: float = 0.02
     max_short_gross: float = 0.20
-    # Per-name short cap (was hardcoded 0.05 in risk.check_short — silently
+    # Per-name short cap (was hardcoded 0.05 in risk.check_short â€” silently
     # rejected every engine-sized 10% short with RISK_SINGLE_SHORT,
     # 2026-10-30). Now explicit; aligned with strategy.max_weight_short.
     max_short_single: float = 0.10
@@ -433,15 +433,15 @@ class SettlementSettings:
 
 @dataclass
 class EventTaggerSettings:
-    """M1a — keyword tagger (docs/05 §3.1)."""
+    """M1a â€” keyword tagger (docs/05 Â§3.1)."""
 
     # Magnitude scaling for signed % features (e.g. "profit jumps 12%")
-    magnitude_scale: float = 0.05  # 1.0 maps to ±1.0 when pct * (1/scale) >= 1
+    magnitude_scale: float = 0.05  # 1.0 maps to Â±1.0 when pct * (1/scale) >= 1
 
 
 @dataclass
 class SectorClusterSettings:
-    """P2-08 — TF-IDF + KMeans over /stocks descriptions."""
+    """P2-08 â€” TF-IDF + KMeans over /stocks descriptions."""
 
     n_clusters: int = 6
     min_n_clusters: int = 2
@@ -458,7 +458,7 @@ class SignalsSettings:
     """Container for the M1a + sector clustering + ensemble knobs.
 
     M5 regime detection (bot.models.regime.RegimeDetector) owns its own
-    `RegimeConfig` defaults and is wired directly by bot.main.TradingBot —
+    `RegimeConfig` defaults and is wired directly by bot.main.TradingBot â€”
     no regime section here.
     """
 
@@ -558,7 +558,7 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
         # P3-15: rl_tuner sub-block needs to be parsed before the dataclass
         # filter strips it. Build it here and assign after.
         rl_block = strat.pop("rl_tuner", None)
-        # NOTE: do NOT pop `weights` here — StrategySettings owns the canonical
+        # NOTE: do NOT pop `weights` here â€” StrategySettings owns the canonical
         # field and we need to pass it through to the constructor below so
         # YAML values aren't silently replaced by the dataclass default.
         s.strategy = StrategySettings(**{k: v for k, v in strat.items() if k in StrategySettings.__dataclass_fields__})
@@ -604,9 +604,9 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
                 floor=float(tb_block.get("floor", 0.5) or 0.5),
                 cap=float(tb_block.get("cap", 1.15) or 1.15),
                 min_obs=int(tb_block.get("min_obs", 2) or 2),
-                veto_pulls=int(tb_block.get("veto_pulls", 5) or 5),
+                veto_pulls=int(tb_block.get("veto_pulls", 3) or 3),
                 veto_z=float(tb_block.get("veto_z", -0.55) or -0.55),
-                veto_avg_rupees=float(tb_block.get("veto_avg_rupees", 5000.0) or 5000.0),
+                veto_avg_rupees=float(tb_block.get("veto_avg_rupees", 8000.0) or 8000.0),
                 day_decay=float(tb_block.get("day_decay", 0.90) or 0.90),
             )
         se_block = strat.pop("short_engine", None)
@@ -680,7 +680,7 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
         if "weights" in sig:
             s.signals.weights = {k: float(v) for k, v in sig["weights"].items()}
             sig.pop("weights")
-        # `regime` key in YAML is now ignored — M5 owns its own RegimeConfig.
+        # `regime` key in YAML is now ignored â€” M5 owns its own RegimeConfig.
         if "regime" in sig:
             sig.pop("regime")
         if "event_tagger" in sig:

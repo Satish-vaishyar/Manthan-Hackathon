@@ -83,14 +83,19 @@ strategy:
     floor: 0.5
     cap: 1.15
     min_obs: 2
-    # Hard BUY-veto: >=5 (decayed) realised trades with edge z <= -0.55
+    # Hard BUY-veto: >=3 (decayed) realised trades with edge z <= -0.55
     # blocks new BUYs for chronic losers. Fully symbol-agnostic: learns
     # from realised P&L at runtime and self-heals via 0.90/quiet-day decay.
-    veto_pulls: 5  # decayed count; ~5 recent realised trades
+    # Tightened 2026-10-30 (5->3): current-session autopsy showed AERX
+    # losing -20K/-16K/-14K/-12K on FOUR consecutive entries before the
+    # 5-pull veto could arm; 3 pulls stops the bleeding one trade earlier
+    # while the raised magnitude guard (8K) keeps it aimed at heavy losers.
+    veto_pulls: 3  # decayed count; ~3 recent realised trades
     veto_z: -0.55
-    # Magnitude guard: veto also needs avg realised <= -5000/trade, so
-    # low-win-rate / big-winner names (the profit engine) are NOT vetoed.
-    veto_avg_rupees: 5000
+    # Magnitude guard: veto also needs avg realised <= -8000/trade, so
+    # low-win-rate / big-winner names (the profit engine) are NOT vetoed,
+    # and neither are small-stakes scratch losers.
+    veto_avg_rupees: 8000
     day_decay: 0.90
   # P3-23: take-profit — DISABLED, superseded by trailing_sl below (the
   # trailing stop books max possible profit: winners run past +10% while
