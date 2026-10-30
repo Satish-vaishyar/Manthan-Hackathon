@@ -235,6 +235,35 @@ def test_risk_per_name_short_cap_aligns_with_engine() -> None:
     assert not rm.check_short(ledger, "AAA", 110, 1000.0, d).ok
 
 
+class TestTwoAxisTrigger:
+    """two_axis: >=2 axes (range-normalised) must clear the bar. Tradebook
+    evidence: momentum-ONLY shorts bounce (bearish-mom IC -0.213)."""
+
+    def test_mom_only_does_not_fire(self) -> None:
+        e = ShortAlphaEngine(_settings(trigger="two_axis", entry_threshold=0.63))
+        # mom maxed bearish but rank/news flat -> only ONE axis clears
+        ev = [_eval("AAA", 0.0, 0.0, -1.00)]
+        assert e.evaluate(ev, regime="neutral", vol_fn=lambda t: 0.2) == {}
+
+    def test_two_axes_fire(self) -> None:
+        e = ShortAlphaEngine(_settings(trigger="two_axis", entry_threshold=0.63))
+        # mom -1.00 (norm 1.0) + news -0.20 (norm 0.74) -> TWO axes clear
+        ev = [_eval("AAA", 0.0, -0.20, -1.00)]
+        assert "AAA" in e.evaluate(ev, regime="neutral", vol_fn=lambda t: 0.2)
+
+    def test_rank_counts_via_normalisation(self) -> None:
+        e = ShortAlphaEngine(_settings(trigger="two_axis", entry_threshold=0.63))
+        # rank -0.12 -> norm 0.80 >= 0.63; mom -0.70 -> norm 0.70: two axes
+        ev = [_eval("AAA", -0.12, 0.0, -0.70)]
+        assert "AAA" in e.evaluate(ev, regime="neutral", vol_fn=lambda t: 0.2)
+
+    def test_news_alone_below_norm_bar(self) -> None:
+        e = ShortAlphaEngine(_settings(trigger="two_axis", entry_threshold=0.63))
+        # news -0.15 -> norm 0.56 < 0.63; mom -0.70 -> norm 0.70: one axis
+        ev = [_eval("AAA", 0.0, -0.15, -0.70)]
+        assert e.evaluate(ev, regime="neutral", vol_fn=lambda t: 0.2) == {}
+
+
 def test_short_engine_block_parsed_from_yaml() -> None:
     s = load_settings("configs/default.yaml")
     se = s.strategy.short_engine
@@ -242,8 +271,11 @@ def test_short_engine_block_parsed_from_yaml() -> None:
     # live-enabled in independent mode (user request 2026-10-30); per-axis
     # 0.63 trigger (user spec) + tight caps keep it a low-exposure module
     assert se.enabled is True and se.mode == "independent"
-    assert se.trigger == "any_axis"
-    assert se.entry_threshold == pytest.approx(0.63)  # user spec 2026-10-30
+    assert se.trigger == "two_axis"
+    assert se.entry_threshold == pytest.approx(0.75)  # user spec 2026-10-30 (raised from 0.63)
+    assert se.axis_scales["rank"] == pytest.approx(0.15)
+    assert se.axis_scales["news"] == pytest.approx(0.27)
+    assert se.axis_scales["mom"] == pytest.approx(1.0)
     assert se.exit_threshold == pytest.approx(0.40)
     assert se.adverse_stop_pct == pytest.approx(0.10)
     assert se.max_names == 3

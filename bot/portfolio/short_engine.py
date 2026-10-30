@@ -110,18 +110,28 @@ class ShortAlphaEngine:
                 vol = 0.0
             if vol <= 0:
                 continue
-            if getattr(self.settings, "trigger", "blend") == "any_axis":
-                # Entry when ANY single axis shows >= entry_threshold bearish
-                # conviction (the blend caps near ~0.36 because rank/news
-                # live in [-0.25, +0.25] — a 0.63 blend bar never fires).
+            trigger = getattr(self.settings, "trigger", "blend")
+            if trigger in ("any_axis", "two_axis"):
+                # Entry on per-axis bearish conviction (the blend caps near
+                # ~0.36 because rank/news live in [-0.25, +0.25] — a 0.63
+                # blend bar never fires). two_axis requires >=2 axes to
+                # agree: tradebook IC showed momentum-ONLY shorts bounce
+                # (bearish-mom IC -0.213 on realized shorts, 2026-10-30).
+                # Per-axis conviction, normalised by each axis's observed
+                # range (rank/news live in ~[-0.25,+0.25], mom in [-1,1]) —
+                # otherwise 0.63 is reachable ONLY by momentum and two_axis
+                # could never fire. Scales from 1,015 journal observations.
+                scales = getattr(self.settings, "axis_scales", None) or {
+                    "rank": 0.15, "news": 0.27, "mom": 1.0}
                 ax = []
                 if has_rank:
-                    ax.append(-e.rank_score)
+                    ax.append(-e.rank_score / max(scales.get("rank", 0.15), 1e-9))
                 if has_news:
-                    ax.append(-e.news_score)
+                    ax.append(-e.news_score / max(scales.get("news", 0.27), 1e-9))
                 if has_mom:
-                    ax.append(-e.momentum_score)
-                is_entry = bool(ax) and max(ax) >= entry_thr
+                    ax.append(-e.momentum_score / max(scales.get("mom", 1.0), 1e-9))
+                need = 2 if trigger == "two_axis" else 1
+                is_entry = sum(1 for a in ax if a >= entry_thr) >= need
             else:
                 is_entry = bs >= entry_thr
             is_hold = int(held.get(e.ticker, 0)) > 0 and bs >= exit_thr

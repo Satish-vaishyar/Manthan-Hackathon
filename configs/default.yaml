@@ -132,14 +132,15 @@ strategy:
     enabled: true
     mode: independent    # off | hedge | independent
     weights: { rank: 0.333, news: 0.333, mom: 0.334 }
-    # trigger: any_axis = entry when ANY single axis shows >= entry_threshold
-    # bearish conviction. REQUIRED: 1,015 journal observations (2026-10-30)
-    # show the equal-thirds blend MAXES at 0.355 (rank axis lives in
-    # [-0.14,+0.13], news in [-0.27,+0.25]) — a 0.63 blend bar can never
-    # fire. Momentum is the only full-range axis, so the user's 63% now
-    # applies per-axis. "blend" mode kept for completeness.
-    trigger: any_axis
-    entry_threshold: 0.63   # user spec 2026-10-30 — per-axis bearish conviction
+    # trigger: two_axis = at least TWO axes must clear the bar (per-axis
+    # normalised by observed range). REQUIRED by tradebook evidence
+    # (2026-10-30, 50 realized shorts): bearish-MOMENTUM-only shorts have
+    # IC -0.213 vs realized short returns — crashed names BOUNCE (mean
+    # reversion). Multi-axis agreement filters those traps. any_axis/blend
+    # modes kept for A/B. axis_scales from 1,015 journal observations.
+    trigger: two_axis
+    axis_scales: { rank: 0.15, news: 0.27, mom: 1.0 }
+    entry_threshold: 0.75   # user spec 2026-10-30 (raised from 0.63) — per-axis bearish conviction
     exit_threshold: 0.40    # bearish-score decay -> COVER
     adverse_stop_pct: 0.10  # hard stop: price +10% vs short entry
     max_names: 3

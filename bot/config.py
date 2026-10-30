@@ -227,10 +227,18 @@ class ShortEngineSettings:
     # (REACHABLE range matters: the rank/news axes live in ~[-0.25, +0.25],
     # so the blend caps near ~0.36 — a 0.63 blend threshold NEVER fires,
     # proven on 1,015 journal observations 2026-10-30). "any_axis" = entry
-    # when ANY single negated axis >= entry_threshold (momentum is the
-    # full-range axis that actually carries the signal); the blend still
-    # ranks/sizes candidates and drives the decay exit.
-    trigger: str = "any_axis"
+    # when ANY single negated axis >= entry_threshold; "two_axis" = at
+    # least TWO axes must clear the bar — required because tradebook
+    # analysis (2026-10-30, 50 realized shorts) showed bearish-MOMENTUM-only
+    # shorts have IC -0.213 vs realized short returns: crashed names
+    # BOUNCE. Multi-axis agreement filters those mean-reversion traps.
+    # The blend still ranks/sizes candidates and drives the decay exit.
+    trigger: str = "two_axis"
+    # Per-axis observed ranges (1,015 journal obs 2026-10-30): used to
+    # normalise per-axis conviction so the 0.63 bar means "top ~37% of the
+    # axis's own range" instead of being reachable only by momentum.
+    axis_scales: dict = field(default_factory=lambda: {
+        "rank": 0.15, "news": 0.27, "mom": 1.0})
     weights: dict = field(default_factory=lambda: {
         "rank": 1.0 / 3.0, "news": 1.0 / 3.0, "mom": 1.0 / 3.0})
     entry_threshold: float = 0.85    # stricter than the long 0.75
@@ -582,7 +590,10 @@ def load_settings(env: str | None = None, dry_run: bool = False) -> Settings:
             s.strategy.short_engine = ShortEngineSettings(
                 enabled=bool(se_block.get("enabled", False)),
                 mode=str(se_block.get("mode", "off") or "off"),
-                trigger=str(se_block.get("trigger", "any_axis") or "any_axis"),
+                trigger=str(se_block.get("trigger", "two_axis") or "two_axis"),
+                axis_scales={k: float(v) for k, v in
+                             (se_block.get("axis_scales") or
+                              {"rank": 0.15, "news": 0.27, "mom": 1.0}).items()},
                 weights={k: float(v) for k, v in
                          (se_block.get("weights") or
                           {"rank": 1/3, "news": 1/3, "mom": 1/3}).items()},
