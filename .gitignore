@@ -54,3 +54,9 @@ model2/finbert_hf_home/
 
 # local runtime secrets (loaded by run_bot.py)
 .env
+
+# Training artifacts (generated, not source)
+.venv-train/
+model1/retrain/
+model2/artifacts/seed_*/
+model3/retrain/
